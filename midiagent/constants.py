@@ -2,6 +2,13 @@ from midiagent.types import Key, MidiEventType, TimeSignature
 
 KEYS: list[Key] = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
 TIME_SIGNATURES: list[TimeSignature] = ["3/4", "4/4", "5/4", "6/8", "7/8"]
+TIME_SIGNATURE_BEATS_PER_MEASURE: dict[TimeSignature, int] = {
+    "3/4": 3,
+    "4/4": 4,
+    "5/4": 5,
+    "6/8": 6,
+    "7/8": 7,
+}
 MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "C-1": (0x90, 0),
     "C#-1": (0x90, 1),

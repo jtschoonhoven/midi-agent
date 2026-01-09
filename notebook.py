@@ -1,5 +1,7 @@
 import marimo
 
+from midiagent.midi_playback import play_midi
+
 __generated_with = "0.18.4"
 app = marimo.App(width="medium", app_title="midi-agent")
 
@@ -118,6 +120,7 @@ def chat(
 ):
     from midiagent.ai import DslResponse, PlanResponse, PipelineState, pipeline
     from midiagent.constants import MIDI_EVENT_TO_HEX
+    from midiagent.midi_playback import play_midi
 
     def get_response(
         messages: list[marimo.ai.ChatMessage],
@@ -157,14 +160,7 @@ def chat(
             for event in response.dsl
         ]))
 
-        events: list[tuple(int, int, int)] = []
-        for event in response.get_midi_events():
-            status_byte, data_byte_1 = MIDI_EVENT_TO_HEX[event.event]
-            data_byte_2 = event.value
-            payload = (status_byte, data_byte_1, data_byte_2)
-            events.append(payload)
-
-        midi.events = events
+        play_midi(plan.bpm, plan.time_signature, response.get_midi_events(), midi)
 
         return plan.reasoning
 
