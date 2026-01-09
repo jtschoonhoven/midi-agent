@@ -10,41 +10,33 @@ def _():
 
     from midiagent.midi_widget import MidiWidget
 
-    widget = marimo.ui.anywidget(MidiWidget())
-    widget
-    return marimo, widget
+    midi = marimo.ui.anywidget(MidiWidget())
 
-
-@app.cell
-def _(marimo):
     # Note options: C4 through C5
     note_options = {
         "C4": 60, "D4": 62, "E4": 64, "F4": 65,
         "G4": 67, "A4": 69, "B4": 71, "C5": 72
     }
+
     note_dropdown = marimo.ui.dropdown(
         options=note_options,
         value="C4",
         label="Note"
     )
-    send_note_btn = marimo.ui.button(label="Send Note")
-    marimo.hstack([note_dropdown, send_note_btn])
-    return note_dropdown, send_note_btn
+
+    def send_note(_: None) -> None:
+        midi.events = [(0x90, note_dropdown.value, 100)]
+
+    send_note_btn = marimo.ui.button(label="Send Note", on_click=send_note)
+
+    marimo.vstack([midi, marimo.hstack([note_dropdown, send_note_btn])])
+    return marimo, midi
 
 
 @app.cell
-def _(note_dropdown, send_note_btn, widget):
-    # When button is clicked, set widget notes to selected note
-    send_note_btn
-    if note_dropdown.value is not None:
-        widget.notes = [note_dropdown.value]
-    return
-
-
-@app.cell
-def _(marimo, widget):
-    # Display the shared log from the widget
-    _log_text = "\n".join(widget.log) if widget.log else "(no log messages)"
+def _(marimo, midi):
+    # Separate cell for log display - re-renders when widget changes
+    _log_text = "\n".join(midi.log) if midi.log else "(no log messages)"
     marimo.md(f"```\n{_log_text}\n```")
     return
 
@@ -56,11 +48,28 @@ def _(marimo):
     get_time_signature, set_time_signature = marimo.state(None)
     get_bpm, set_bpm = marimo.state(None)
     get_dsl_str, set_dsl_str = marimo.state("")
-    return get_bpm, get_dsl_str, get_key, get_time_signature, set_bpm, set_dsl_str, set_key, set_time_signature
+    return (
+        get_bpm,
+        get_dsl_str,
+        get_key,
+        get_time_signature,
+        set_bpm,
+        set_dsl_str,
+        set_key,
+        set_time_signature,
+    )
 
 
 @app.cell
-def _(get_bpm, get_key, get_time_signature, marimo, set_bpm, set_key, set_time_signature):
+def _(
+    get_bpm,
+    get_key,
+    get_time_signature,
+    marimo,
+    set_bpm,
+    set_key,
+    set_time_signature,
+):
     from midiagent.constants import KEYS, TIME_SIGNATURES
 
     key = marimo.ui.dropdown(
@@ -95,8 +104,20 @@ def _(get_bpm, get_key, get_time_signature, marimo, set_bpm, set_key, set_time_s
 
 
 @app.cell
-def chat(bpm, get_dsl_str, key, marimo, set_bpm, set_dsl_str, set_key, set_time_signature, time_signature):
+def chat(
+    bpm,
+    get_dsl_str,
+    key,
+    marimo,
+    midi,
+    set_bpm,
+    set_dsl_str,
+    set_key,
+    set_time_signature,
+    time_signature,
+):
     from midiagent.ai import DslResponse, PlanResponse, PipelineState, pipeline
+    from midiagent.constants import MIDI_EVENT_TO_HEX
 
     def get_response(
         messages: list[marimo.ai.ChatMessage],
@@ -135,6 +156,15 @@ def chat(bpm, get_dsl_str, key, marimo, set_bpm, set_dsl_str, set_key, set_time_
             f"{event.measure or 'X'}-{event.beat or 'X'}-{event.beat_div4 or 'X'}-{event.beat_div16 or 'X'} {event.event}: {event.value}"
             for event in response.dsl
         ]))
+
+        events: list[tuple(int, int, int)] = []
+        for event in response.get_midi_events():
+            status_byte, data_byte_1 = MIDI_EVENT_TO_HEX[event.event]
+            data_byte_2 = event.value
+            payload = (status_byte, data_byte_1, data_byte_2)
+            events.append(payload)
+
+        midi.events = events
 
         return plan.reasoning
 

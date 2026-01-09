@@ -7,7 +7,7 @@ class MidiWidget(anywidget.AnyWidget):
     A widget for controlling MIDI output.
     """
 
-    notes = traitlets.List(traitlets.Int, default_value=[]).tag(sync=True)
+    events = traitlets.List(default_value=[]).tag(sync=True)
     log = traitlets.List(traitlets.Unicode, default_value=[]).tag(sync=True)
     _esm = """
 function render({ model, el }) {
@@ -70,29 +70,31 @@ function render({ model, el }) {
         }
     };
 
-    // Auto-play notes when they change
-    model.on("change:notes", () => {
-        const notes = model.get("notes");
-        if (!notes || notes.length === 0) return;
+    // Process MIDI events when they change
+    model.on("change:events", () => {
+        const events = model.get("events");
+        if (!events || events.length === 0) return;
 
-        log(`Received notes: [${notes.join(", ")}]`);
+        log(`Received ${events.length} MIDI event(s)`);
 
         if (!output) {
             log("No MIDI output selected.");
+            model.set("events", []);
+            model.save_changes();
             return;
         }
 
-        const ch = 0;      // MIDI channel 1
-        const vel = 100;
+        // Copy events locally and clear the queue immediately to prevent re-processing
+        const eventsToProcess = [...events];
+        model.set("events", []);
+        model.save_changes();
 
-        notes.forEach((note, i) => {
-            const delay = i * 250;  // stagger notes by 250ms
-            setTimeout(() => {
-                output.send([0x90 | ch, note, vel]);      // Note On
-                setTimeout(() => output.send([0x80 | ch, note, 0]), 200); // Note Off
-                log(`Played note ${note}`);
-            }, delay);
-        });
+        // Process events by popping from the front of local copy
+        while (eventsToProcess.length > 0) {
+            const [statusByte, dataByte1, dataByte2] = eventsToProcess.shift();
+            output.send([statusByte, dataByte1, dataByte2]);
+            log(`Sent MIDI: [${statusByte}, ${dataByte1}, ${dataByte2}]`);
+        }
     });
 }
 export default { render };
