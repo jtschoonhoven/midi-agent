@@ -10,6 +10,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from midiagent.constants import MIDI_EVENT_TO_HEX, TIME_SIGNATURE_BEATS_PER_MEASURE
 from midiagent.types import Key, MidiEventType, TimeSignature
 
 
@@ -51,6 +52,27 @@ class MidiEvent:
     beat_div16: int
     event: MidiEventType
     value: int
+
+    def timestamp(self, bpm: int, time_signature: TimeSignature) -> float:
+        """Return the timestamp of the event in seconds, relative to the start of playback."""
+        beats_per_measure = TIME_SIGNATURE_BEATS_PER_MEASURE[time_signature]
+        seconds_per_beat = 60 / bpm
+        seconds_per_div4 = seconds_per_beat / 4
+        seconds_per_div16 = seconds_per_div4 / 4
+        seconds_per_measure = seconds_per_beat * beats_per_measure
+        return sum(
+            [
+            (self.measure - 1) * seconds_per_measure,
+            (self.beat - 1) * seconds_per_beat,
+            ((self.beat_div4 - 1) * seconds_per_div4),
+            ((self.beat_div16 - 1) * seconds_per_div16),
+        ])
+    
+    def payload(self) -> tuple[int, int, int]:
+        status_byte, data_byte_1 = MIDI_EVENT_TO_HEX[self.event]
+        data_byte_2 = self.value
+        return (status_byte, data_byte_1, data_byte_2)
+
 
 class PlanResponse(pydantic.BaseModel):
     """
