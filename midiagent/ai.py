@@ -1,11 +1,13 @@
+from dataclasses import dataclass
 import os
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 import dotenv
 import marimo
 import pydantic
 import weave
 from langchain.chat_models import init_chat_model
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from midiagent.types import Key, MidiEventType, TimeSignature
@@ -25,7 +27,7 @@ weave.init(os.environ["PROJECT_ID"])
 # ==========================================================================
 
 
-class MidiEvent(pydantic.BaseModel):
+class SparseMidiEvent(pydantic.BaseModel):
     """
     A MIDI event (note or CC) at a given point in time.
     Measure, beat, beat_div4, & beat_div16 collectively specify the timing.
@@ -39,6 +41,16 @@ class MidiEvent(pydantic.BaseModel):
     event: MidiEventType = pydantic.Field(description="Human-readable representation of a MIDI note or CC event. Use the provided schema.")
     value: int = pydantic.Field(gt=-1, lt=101, description="The value of a CC event, or the velocity of a note event, scaled 0-100 (inclusive).")
 
+
+@dataclass
+class MidiEvent:
+    """Clone of SparseMidiEvent with required fields."""
+    measure: int
+    beat: int
+    beat_div4: int
+    beat_div16: int
+    event: MidiEventType
+    value: int
 
 class PlanResponse(pydantic.BaseModel):
     """
@@ -57,7 +69,35 @@ class PlanResponse(pydantic.BaseModel):
 
 class DslResponse(pydantic.BaseModel):
     """Final response schema with full MIDI events."""
-    dsl: list[MidiEvent]
+    dsl: list[SparseMidiEvent]
+
+    def get_midi_events(self) -> list[MidiEvent]:
+        result: list[MidiEvent] = []
+
+        measure = 1
+        beat = 1
+        beat_div4 = 1
+        beat_div16 = 1
+
+        for item in self.dsl:
+            if item.measure and item.measure != measure:
+                measure = item.measure
+                beat = 1
+                beat_div4 = 1
+                beat_div16 = 1
+            if item.beat and item.beat != beat:
+                beat = item.beat
+                beat_div4 = 1
+                beat_div16 = 1
+            if item.beat_div4 and item.beat_div4 != beat_div4:
+                beat_div4 = item.beat_div4
+                beat_div16 = 1
+            if item.beat_div16 and item.beat_div16 != beat_div16:
+                beat_div16 = item.beat_div16
+
+            result.append(MidiEvent(measure=measure, beat=beat, beat_div4=beat_div4, beat_div16=beat_div16, event=item.event, value=item.value))
+
+        return result
 
 
 # ==========================================================================
@@ -69,8 +109,28 @@ class PipelineState(TypedDict):
     """State passed between nodes in the pipeline."""
 
     user_request: str
+    # Optional constraints - if set, planning node must use these values
+    key: Key | None
+    bpm: int | None
+    time_signature: TimeSignature | None
+    # Outputs from pipeline nodes
     plan: PlanResponse | None
     response: DslResponse | None
+
+
+class PlanningNodeOutput(TypedDict):
+    """Return type for planning_node - updates plan and constraint fields."""
+
+    plan: PlanResponse
+    key: Key
+    bpm: int
+    time_signature: TimeSignature
+
+
+class GenerationNodeOutput(TypedDict):
+    """Return type for generation_node - updates response field."""
+
+    response: DslResponse
 
 
 # ==========================================================================
@@ -92,6 +152,8 @@ Explain your reasoning so your choices can be evaluated.
 Examples of good reasoning:
 - "The user requested 'bouncy piano' which suggests an upbeat feel. I chose 120 BPM in G major with a I-V-vi-IV progression for its bright, accessible sound."
 - "For a melancholic ballad, I selected D minor at 72 BPM with a i-VI-III-VII progression to create emotional depth."
+
+IMPORTANT: If the user has specified constraints (key, time signature, or BPM), you MUST use those exact values in your plan (unless explicitly asked to change them). Only generate values for parameters that are not constrained.
 """
 
 GENERATION_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
@@ -102,7 +164,7 @@ Your job is to translate this into concrete MIDI events using the provided schem
 Follow the chord progression and style guidance exactly.
 Create musical phrases that fit the specified feel.
 
-Each MidiEvent has:
+Each SparseMidiEvent has:
 - measure: which measure (starting from 1)
 - beat: which beat in the measure (starting from 1)
 - beat_div4: subdivision of the beat into quarters
@@ -120,21 +182,39 @@ if not os.getenv("ANTHROPIC_API_KEY"):
     raise Exception('Missing environment variable "ANTHROPIC_API_KEY"')
 
 # Initialize models with structured output
-planning_model = init_chat_model("claude-sonnet-4-5", model_provider="anthropic").with_structured_output(PlanResponse)
-
-generation_model = init_chat_model("claude-sonnet-4-5", model_provider="anthropic").with_structured_output(DslResponse)
-
-config = {"configurable": {"thread_id": "1"}}  # `thread_id` is a unique identifier for a given conversation
+planning_model = init_chat_model("claude-haiku-4-5", model_provider="anthropic").with_structured_output(PlanResponse)
+generation_model = init_chat_model("claude-haiku-4-5", model_provider="anthropic").with_structured_output(DslResponse)
 
 
-def planning_node(state: PipelineState) -> dict[Literal["plan"], PlanResponse]:
+
+def planning_node(state: PipelineState, config: RunnableConfig) -> PlanningNodeOutput:
     """Stage 1: Analyze user request and create a musical plan."""
-    messages = [{"role": "system", "content": PLANNING_PROMPT}, {"role": "user", "content": state["user_request"]}]
+    # Build constraint info for the prompt from state
+    constraints = []
+    if state.get("key"):
+        constraints.append(f"Musical Key: {state['key']} (REQUIRED - use this exact key unless the user explicitly requests another)")
+    if state.get("time_signature"):
+        constraints.append(f"Time Signature: {state['time_signature']} (REQUIRED - use this exact time signature unless the user explicitly requests another)")
+    if state.get("bpm"):
+        constraints.append(f"BPM: {state['bpm']} (REQUIRED - use this exact tempo unless the user explicitly requests another)")
+
+    user_content = state["user_request"]
+    if constraints:
+        user_content += "\n\nUser constraints (you MUST use these values):\n" + "\n".join(constraints)
+
+    messages = [{"role": "system", "content": PLANNING_PROMPT}, {"role": "user", "content": user_content}]
     plan: PlanResponse = planning_model.invoke(messages, config)
-    return {"plan": plan}
+    
+    # Update state with both the plan and the LLM's chosen values
+    return {
+        "plan": plan,
+        "key": plan.key,
+        "bpm": plan.bpm,
+        "time_signature": plan.time_signature,
+    }
 
 
-def generation_node(state: PipelineState) -> dict[Literal["response"], DslResponse]:
+def generation_node(state: PipelineState, config: RunnableConfig) -> GenerationNodeOutput:
     """
     Stage 2: Generate MIDI events based on the musical plan.
     """
@@ -177,55 +257,33 @@ pipeline = workflow.compile(checkpointer=InMemorySaver())
 # ==========================================================================
 
 
-def get_response(messages: list[marimo.ai.ChatMessage], _: marimo.ai.ChatModelConfig) -> str:
+
+def get_response(
+    messages: list[marimo.ai.ChatMessage],
+    config: marimo.ai.ChatModelConfig,
+) -> tuple[PlanResponse, DslResponse]:
+    """Chat handler that uses config for constraints."""
     # Get the latest user message
     user_request = messages[-1].content if messages else ""
 
-    # Run the pipeline
+    # Extract constraints from marimo config and pass them via state
+    initial_state: PipelineState = {
+        "user_request": user_request,
+        "key": getattr(config, "key", None),
+        "bpm": getattr(config, "bpm", None),
+        "time_signature": getattr(config, "time_signature", None),
+        "plan": None,
+        "response": None,
+    }
+
+    # Run the pipeline - constraints are now in state
     result = pipeline.invoke(
-        {"user_request": user_request, "plan": None, "response": None}, config={"configurable": {"thread_id": "1"}}
+        initial_state,
+        config={"configurable": {"thread_id": "1"}},
     )
 
     # Extract outputs
     plan: PlanResponse = result["plan"]
     response: DslResponse = result["response"]
 
-    # Format response showing both stages
-    response_parts = [
-        "## Musical Plan (Stage 1)",
-        f"**Key:** {plan.key}",
-        f"**BPM:** {plan.bpm}",
-        f"**Time Signature:** {plan.time_signature}",
-        f"**Style:** {plan.style}",
-        f"**Chord Progression:** {' → '.join(plan.chord_progression)}",
-        f"**Reasoning:** {plan.reasoning}",
-        "",
-        "## Generated MIDI (Stage 2)",
-        f"**Events:** {len(response.dsl)} MIDI events generated",
-        f"**Chords:** {' → '.join(response.chord_progression)}",
-    ]
-
-    dsl_parts: list[str] = []
-    measure = 1
-    beat = 1
-    beat_div4 = 1
-    beat_div16 = 1
-
-    for item in response.dsl:
-        if item.measure and item.measure != measure:
-            measure = item.measure
-            beat = 1
-            beat_div4 = 1
-            beat_div16 = 1
-        if item.beat and item.beat != beat:
-            beat = item.beat
-            beat_div4 = 1
-            beat_div16 = 1
-        if item.beat_div4 and item.beat_div4 != beat_div4:
-            beat_div4 = item.beat_div4
-            beat_div16 = 1
-        if item.beat_div16 and item.beat_div16 != beat_div16:
-            beat_div16 = item.beat_div16
-        dsl_parts.append(f"{measure}-{beat}-{beat_div4}-{beat_div16} {item.event} {item.value}")
-
-    return "\n".join(response_parts) + "\n" + "\n".join(dsl_parts)
+    return plan, response
