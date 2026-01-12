@@ -1,4 +1,4 @@
-from midiagent.types import Key, MidiEventType, TimeSignature
+from midiagent.types import Key, MidiEventType, SupportedModel, TimeSignature
 
 KEYS: list[Key] = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
 TIME_SIGNATURES: list[TimeSignature] = ["3/4", "4/4", "5/4", "6/8", "7/8"]
@@ -9,95 +9,104 @@ TIME_SIGNATURE_BEATS_PER_MEASURE: dict[TimeSignature, int] = {
     "6/8": 6,
     "7/8": 7,
 }
+SUPPORTED_MODELS: list[SupportedModel] = [
+    ("anthropic", "claude-haiku-4-5"),
+    ("anthropic", "claude-sonnet-4-5"),
+    ("openai", "gpt-4o-mini"),
+    ("openai", "gpt-4o"),
+    ("openai", "gpt-5-2"),
+    ("openai", "gpt-5-mini"),
+    ("openai", "gpt-5-nano"),
+]
 MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "C-1": (0x90, 0),
     "C#-1": (0x90, 1),
-    "Db-1": (0x90, 1), # Same as C#-1
+    "Db-1": (0x90, 1),  # Same as C#-1
     "D-1": (0x90, 2),
-    "D#-1": (0x90, 3), 
-    "Eb-1": (0x90, 3), # Same as D#-1
+    "D#-1": (0x90, 3),
+    "Eb-1": (0x90, 3),  # Same as D#-1
     "E-1": (0x90, 4),
     "F-1": (0x90, 5),
     "F#-1": (0x90, 6),
-    "Gb-1": (0x90, 6), # Same as F#-1
+    "Gb-1": (0x90, 6),  # Same as F#-1
     "G-1": (0x90, 7),
     "G#-1": (0x90, 8),
-    "Ab-1": (0x90, 8), # Same as G#-1
+    "Ab-1": (0x90, 8),  # Same as G#-1
     "A-1": (0x90, 9),
     "A#-1": (0x90, 10),
-    "Bb-1": (0x90, 10), # Same as A#-1
+    "Bb-1": (0x90, 10),  # Same as A#-1
     "B-1": (0x90, 11),
     "C0": (0x90, 12),
     "C#0": (0x90, 13),
-    "Db0": (0x90, 13), # Same as C#0
+    "Db0": (0x90, 13),  # Same as C#0
     "D0": (0x90, 14),
     "D#0": (0x90, 15),
-    "Eb0": (0x90, 15), # Same as D#-1
+    "Eb0": (0x90, 15),  # Same as D#-1
     "E0": (0x90, 16),
     "F0": (0x90, 17),
     "F#0": (0x90, 18),
-    "Gb0": (0x90, 18), # Same as F#0
+    "Gb0": (0x90, 18),  # Same as F#0
     "G0": (0x90, 19),
     "G#0": (0x90, 20),
-    "Ab0": (0x90, 20), # Same as G#0
-    "A0": (0x90, 21 ),
+    "Ab0": (0x90, 20),  # Same as G#0
+    "A0": (0x90, 21),
     "A#0": (0x90, 22),
-    "Bb0": (0x90, 22), # Same as A#0
+    "Bb0": (0x90, 22),  # Same as A#0
     "B0": (0x90, 23),
     "C1": (0x90, 24),
     "C#1": (0x90, 25),
-    "Db1": (0x90, 25), # Same as C#1
+    "Db1": (0x90, 25),  # Same as C#1
     "D1": (0x90, 26),
     "D#1": (0x90, 27),
-    "Eb1": (0x90, 27), # Same as D#1
+    "Eb1": (0x90, 27),  # Same as D#1
     "E1": (0x90, 28),
     "F1": (0x90, 29),
     "F#1": (0x90, 30),
-    "Gb1": (0x90, 30), # Same as F#1
+    "Gb1": (0x90, 30),  # Same as F#1
     "G1": (0x90, 31),
     "G#1": (0x90, 32),
-    "Ab1": (0x90, 32), # Same as G#1
+    "Ab1": (0x90, 32),  # Same as G#1
     "A1": (0x90, 33),
     "A#1": (0x90, 34),
-    "Bb1": (0x90, 34), # Same as A#1
+    "Bb1": (0x90, 34),  # Same as A#1
     "B1": (0x90, 35),
     "C2": (0x90, 36),
     "C#2": (0x90, 37),
-    "Db2": (0x90, 37), # Same as C#2
+    "Db2": (0x90, 37),  # Same as C#2
     "D2": (0x90, 38),
     "D#2": (0x90, 39),
-    "Eb2": (0x90, 39), # Same as D#2
+    "Eb2": (0x90, 39),  # Same as D#2
     "E2": (0x90, 40),
     "F2": (0x90, 41),
     "F#2": (0x90, 42),
-    "Gb2": (0x90, 42), # Same as F#2
+    "Gb2": (0x90, 42),  # Same as F#2
     "G2": (0x90, 43),
     "G#2": (0x90, 44),
-    "Ab2": (0x90, 44), # Same as G#2
+    "Ab2": (0x90, 44),  # Same as G#2
     "A2": (0x90, 45),
     "A#2": (0x90, 46),
-    "Bb2": (0x90, 46), # Same as A#2
+    "Bb2": (0x90, 46),  # Same as A#2
     "B2": (0x90, 47),
     "C3": (0x90, 48),
     "C#3": (0x90, 49),
-    "Db3": (0x90, 49), # Same as C#3
+    "Db3": (0x90, 49),  # Same as C#3
     "D3": (0x90, 50),
     "D#3": (0x90, 51),
-    "Eb3": (0x90, 51), # Same as D#3
+    "Eb3": (0x90, 51),  # Same as D#3
     "E3": (0x90, 52),
     "F3": (0x90, 53),
     "F#3": (0x90, 54),
-    "Gb3": (0x90, 54), # Same as F#3
+    "Gb3": (0x90, 54),  # Same as F#3
     "G3": (0x90, 55),
     "G#3": (0x90, 56),
-    "Ab3": (0x90, 56), # Same as G#3
+    "Ab3": (0x90, 56),  # Same as G#3
     "A3": (0x90, 57),
     "A#3": (0x90, 58),
-    "Bb3": (0x90, 58), # Same as A#3
+    "Bb3": (0x90, 58),  # Same as A#3
     "B3": (0x90, 59),
     "C4": (0x90, 60),
     "C#4": (0x90, 61),
-    "Db4": (0x90, 61), # Same as C#4
+    "Db4": (0x90, 61),  # Same as C#4
     "D4": (0x90, 62),
     "D#4": (0x90, 63),
     "Eb4": (0x90, 63),  # Same as D#4
@@ -193,4 +202,6 @@ MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "G9": (0x90, 127),
     "ModWheel": (0xB0, 1),
     "Sustain": (0xB0, 64),
+    "AllNotesOff": (0xB0, 123),
+    "ResetControllers": (0xB0, 121),
 }

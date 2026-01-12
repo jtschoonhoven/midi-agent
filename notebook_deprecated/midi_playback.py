@@ -1,4 +1,5 @@
 import time
+
 from midiagent.ai import MidiEvent
 from midiagent.midi_widget import MidiWidget
 from midiagent.types import TimeSignature

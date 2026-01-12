@@ -1,0 +1,842 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MIDI Agent API",
+    "description": "AI-powered MIDI generation from natural language prompts",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/midi/generate": {
+      "post": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Generate Midi",
+        "description": "Generate MIDI events from a natural language prompt.\n\nArgs:\n    request: Generation request with user_id, thread_id, constraints, and prompt\n    db: Database session\n\nReturns:\n    MidiResponse with plan and list of MIDI events\n\nRaises:\n    HTTPException: If generation fails",
+        "operationId": "generate_midi_api_midi_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MidiResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/restore": {
+      "post": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Restore Conversation",
+        "description": "Restore a previous conversation by user_id and thread_id.\n\nArgs:\n    request: Restore request with user_id and thread_id\n    db: Database session\n\nReturns:\n    ConversationRestoreResponse with full conversation history\n\nRaises:\n    HTTPException: If conversation not found or retrieval fails",
+        "operationId": "restore_conversation_api_midi_restore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRestoreResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Check Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConversationMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Message role: 'user' or 'assistant'"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Message content"
+          },
+          "plan_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Model",
+            "description": "Model used for planning (user messages only)"
+          },
+          "generate_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generate Model",
+            "description": "Model used for generation (user messages only)"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Musical key constraint (user messages only)"
+          },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm",
+            "description": "BPM constraint (user messages only)"
+          },
+          "time_signature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Signature",
+            "description": "Time signature constraint (user messages only)"
+          },
+          "measures": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measures",
+            "description": "Measures constraint (user messages only)"
+          },
+          "plan_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Data",
+            "description": "Plan data (assistant messages only)"
+          },
+          "midi_events": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Midi Events",
+            "description": "MIDI events (assistant messages only)"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of message creation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ConversationMessage",
+        "description": "A message in the conversation history."
+      },
+      "ConversationRestoreRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id",
+            "description": "User identifier"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "Thread identifier to restore"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "thread_id"
+        ],
+        "title": "ConversationRestoreRequest",
+        "description": "Request to restore a conversation by user_id and thread_id."
+      },
+      "ConversationRestoreResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id",
+            "description": "User identifier"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "Thread identifier"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "Conversation messages in chronological order"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "description": "Total number of messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "thread_id",
+          "messages",
+          "message_count"
+        ],
+        "title": "ConversationRestoreResponse",
+        "description": "Response containing conversation history."
+      },
+      "GenerateRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id",
+            "description": "User identifier for tracking"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "Thread identifier for conversation context"
+          },
+          "plan_model": {
+            "type": "string",
+            "enum": [
+              "claude-haiku-4-5",
+              "claude-sonnet-4-5",
+              "gpt-4o-mini",
+              "gpt-4o",
+              "gpt-5-2",
+              "gpt-5-mini",
+              "gpt-5-nano"
+            ],
+            "title": "Plan Model",
+            "description": "Model to use for the planning stage"
+          },
+          "generate_model": {
+            "type": "string",
+            "enum": [
+              "claude-haiku-4-5",
+              "claude-sonnet-4-5",
+              "gpt-4o-mini",
+              "gpt-4o",
+              "gpt-5-2",
+              "gpt-5-mini",
+              "gpt-5-nano"
+            ],
+            "title": "Generate Model",
+            "description": "Model to use for the generation stage"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "Ab",
+                  "A",
+                  "A#",
+                  "Bb",
+                  "B",
+                  "C",
+                  "C#",
+                  "Db",
+                  "D",
+                  "D#",
+                  "Eb",
+                  "E",
+                  "F",
+                  "F#",
+                  "Gb",
+                  "G",
+                  "G#"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Musical key constraint"
+          },
+          "bpm": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMaximum": 361.0,
+                "exclusiveMinimum": 29.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bpm",
+            "description": "Tempo constraint in BPM (30-360)"
+          },
+          "time_signature": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "3/4",
+                  "4/4",
+                  "5/4",
+                  "6/8",
+                  "7/8"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Signature",
+            "description": "Time signature constraint"
+          },
+          "measures": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMaximum": 33.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measures",
+            "description": "Number of measures to generate (1-32)"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt",
+            "description": "User's musical generation request"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "thread_id",
+          "plan_model",
+          "generate_model",
+          "prompt"
+        ],
+        "title": "GenerateRequest",
+        "description": "Request payload for /api/midi/generate endpoint."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MidiEvent": {
+        "properties": {
+          "measure": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Measure",
+            "description": "The measure, starting from 1"
+          },
+          "beat": {
+            "type": "integer",
+            "exclusiveMaximum": 9.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Beat",
+            "description": "The beat within the measure, starting from 1"
+          },
+          "beat_div4": {
+            "type": "integer",
+            "exclusiveMaximum": 9.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Beat Div4",
+            "description": "Divides the beat into quarters (16th notes)"
+          },
+          "beat_div16": {
+            "type": "integer",
+            "exclusiveMaximum": 9.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Beat Div16",
+            "description": "Divides the beat into 16ths (64th notes)"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "C-1",
+              "C#-1",
+              "Db-1",
+              "D-1",
+              "D#-1",
+              "Eb-1",
+              "E-1",
+              "F-1",
+              "F#-1",
+              "Gb-1",
+              "G-1",
+              "G#-1",
+              "Ab-1",
+              "A-1",
+              "A#-1",
+              "Bb-1",
+              "B-1",
+              "C0",
+              "C#0",
+              "Db0",
+              "D0",
+              "D#0",
+              "Eb0",
+              "E0",
+              "F0",
+              "F#0",
+              "Gb0",
+              "G0",
+              "G#0",
+              "Ab0",
+              "A0",
+              "A#0",
+              "Bb0",
+              "B0",
+              "C1",
+              "C#1",
+              "Db1",
+              "D1",
+              "D#1",
+              "Eb1",
+              "E1",
+              "F1",
+              "F#1",
+              "Gb1",
+              "G1",
+              "G#1",
+              "Ab1",
+              "A1",
+              "A#1",
+              "Bb1",
+              "B1",
+              "C2",
+              "C#2",
+              "Db2",
+              "D2",
+              "D#2",
+              "Eb2",
+              "E2",
+              "F2",
+              "F#2",
+              "Gb2",
+              "G2",
+              "G#2",
+              "Ab2",
+              "A2",
+              "A#2",
+              "Bb2",
+              "B2",
+              "C3",
+              "C#3",
+              "Db3",
+              "D3",
+              "D#3",
+              "Eb3",
+              "E3",
+              "F3",
+              "F#3",
+              "Gb3",
+              "G3",
+              "G#3",
+              "Ab3",
+              "A3",
+              "A#3",
+              "Bb3",
+              "B3",
+              "C4",
+              "C#4",
+              "Db4",
+              "D4",
+              "D#4",
+              "Eb4",
+              "E4",
+              "F4",
+              "F#4",
+              "Gb4",
+              "G4",
+              "G#4",
+              "Ab4",
+              "A4",
+              "A#4",
+              "Bb4",
+              "B4",
+              "C5",
+              "C#5",
+              "Db5",
+              "D5",
+              "D#5",
+              "Eb5",
+              "E5",
+              "F5",
+              "F#5",
+              "Gb5",
+              "G5",
+              "G#5",
+              "Ab5",
+              "A5",
+              "A#5",
+              "Bb5",
+              "B5",
+              "C6",
+              "C#6",
+              "Db6",
+              "D6",
+              "D#6",
+              "Eb6",
+              "E6",
+              "F6",
+              "F#6",
+              "Gb6",
+              "G6",
+              "G#6",
+              "Ab6",
+              "A6",
+              "A#6",
+              "Bb6",
+              "B6",
+              "C7",
+              "C#7",
+              "Db7",
+              "D7",
+              "D#7",
+              "Eb7",
+              "E7",
+              "F7",
+              "F#7",
+              "Gb7",
+              "G7",
+              "G#7",
+              "Ab7",
+              "A7",
+              "A#7",
+              "Bb7",
+              "B7",
+              "C8",
+              "C#8",
+              "Db8",
+              "D8",
+              "D#8",
+              "Eb8",
+              "E8",
+              "F8",
+              "F#8",
+              "Gb8",
+              "G8",
+              "G#8",
+              "Ab8",
+              "A8",
+              "A#8",
+              "Bb8",
+              "B8",
+              "C9",
+              "C#9",
+              "Db9",
+              "D9",
+              "D#9",
+              "Eb9",
+              "E9",
+              "F9",
+              "F#9",
+              "Gb9",
+              "G9",
+              "Sustain",
+              "ModWheel",
+              "AllNotesOff",
+              "ResetControllers"
+            ],
+            "title": "Event",
+            "description": "MIDI note or CC event"
+          },
+          "value": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Value",
+            "description": "Velocity or CC value, scaled 0-100"
+          }
+        },
+        "type": "object",
+        "required": [
+          "measure",
+          "beat",
+          "beat_div4",
+          "beat_div16",
+          "event",
+          "value"
+        ],
+        "title": "MidiEvent",
+        "description": "A fully resolved MIDI event with explicit timing."
+      },
+      "MidiResponse": {
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanResponse",
+            "description": "Musical plan from the planning stage"
+          },
+          "midi": {
+            "items": {
+              "$ref": "#/components/schemas/MidiEvent"
+            },
+            "type": "array",
+            "title": "Midi",
+            "description": "Generated MIDI events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan",
+          "midi"
+        ],
+        "title": "MidiResponse",
+        "description": "Response from /api/midi/generate endpoint including plan and MIDI."
+      },
+      "PlanResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "Ab",
+              "A",
+              "A#",
+              "Bb",
+              "B",
+              "C",
+              "C#",
+              "Db",
+              "D",
+              "D#",
+              "Eb",
+              "E",
+              "F",
+              "F#",
+              "Gb",
+              "G",
+              "G#"
+            ],
+            "title": "Key",
+            "description": "The musical key for the composition"
+          },
+          "bpm": {
+            "type": "integer",
+            "exclusiveMaximum": 361.0,
+            "exclusiveMinimum": 29.0,
+            "title": "Bpm",
+            "description": "Tempo in beats-per-minute, 30-360"
+          },
+          "time_signature": {
+            "type": "string",
+            "enum": [
+              "3/4",
+              "4/4",
+              "5/4",
+              "6/8",
+              "7/8"
+            ],
+            "title": "Time Signature",
+            "description": "Time signature for the piece"
+          },
+          "measures": {
+            "type": "integer",
+            "exclusiveMaximum": 33.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Measures",
+            "description": "Number of measures in the composition (1-32)"
+          },
+          "style": {
+            "type": "string",
+            "title": "Style",
+            "description": "Brief description of the musical style/feel"
+          },
+          "chord_progression": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Chord Progression",
+            "description": "Chord progression using chord symbols (e.g. ['Gbm7', 'D', 'Em', 'C'])"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning",
+            "description": "Explanation of musical choices for evaluation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "bpm",
+          "time_signature",
+          "measures",
+          "style",
+          "chord_progression",
+          "reasoning"
+        ],
+        "title": "PlanResponse",
+        "description": "High-level musical plan from the planning stage."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

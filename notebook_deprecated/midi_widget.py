@@ -55,7 +55,7 @@ function render({ model, el }) {
         }
     }
 
-    enableBtn.onclick = async () => {
+    async function enableMidi() {
         try {
             midiAccess = await navigator.requestMIDIAccess();
             log("MIDI enabled.");
@@ -68,7 +68,12 @@ function render({ model, el }) {
         } catch (e) {
             log("Failed to enable MIDI: " + e);
         }
-    };
+    }
+
+    enableBtn.onclick = enableMidi;
+
+    // Auto-enable MIDI on load (works if page already has MIDI permission)
+    enableMidi();
 
     // Process MIDI events when they change
     model.on("change:events", () => {

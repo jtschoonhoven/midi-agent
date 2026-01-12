@@ -1,8 +1,20 @@
 from typing import Literal
 
-
 Key = Literal["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
 TimeSignature = Literal["3/4", "4/4", "5/4", "6/8", "7/8"]
+SupportedModel = (
+    tuple[Literal["anthropic"], Literal["claude-haiku-4-5", "claude-sonnet-4-5"]]
+    | tuple[Literal["openai"], Literal["gpt-4o-mini", "gpt-4o", "gpt-5-2", "gpt-5-mini", "gpt-5-nano"]]
+)
+ModelName = Literal[
+    "claude-haiku-4-5",
+    "claude-sonnet-4-5",
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-5-2",
+    "gpt-5-mini",
+    "gpt-5-nano",
+]
 MidiEventType = Literal[
     "C-1",
     "C#-1",
@@ -187,4 +199,6 @@ MidiEventType = Literal[
     "G9",
     "Sustain",
     "ModWheel",
+    "AllNotesOff",
+    "ResetControllers",
 ]
