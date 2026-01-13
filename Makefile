@@ -1,4 +1,4 @@
-.PHONY: notebook api app up fmt lint mypy check types
+.PHONY: notebook api app up fmt lint mypy check types test
 
 notebook:
 	uv run marimo edit notebook.py
@@ -30,3 +30,6 @@ check: lint mypy
 
 types:
 	cd app && npm run generate:types
+
+test:
+	uv run pytest api/tests/ -v

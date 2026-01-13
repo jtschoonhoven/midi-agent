@@ -174,9 +174,7 @@ def compute_metrics(results: list[EvalResult]) -> dict[str, float]:
     # MIDI event metrics
     total_events = sum(r.num_events for r in results)
     avg_events = total_events / total if total > 0 else 0
-    avg_events_successful = (
-        sum(r.num_events for r in results if r.success) / successful if successful > 0 else 0
-    )
+    avg_events_successful = sum(r.num_events for r in results if r.success) / successful if successful > 0 else 0
 
     # Plan quality metrics (could be expanded)
     avg_bpm = sum(r.plan.bpm for r in results if r.success) / successful if successful > 0 else 0
@@ -242,7 +240,7 @@ def run_evaluation(
     user_id = uuid4()
 
     for i, example in enumerate(dataset):
-        print(f"Evaluating example {i+1}/{len(dataset)}: {example.prompt[:50]}...")
+        print(f"Evaluating example {i + 1}/{len(dataset)}: {example.prompt[:50]}...")
         thread_id = uuid4()
 
         result = evaluate_single_example(

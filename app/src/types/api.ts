@@ -64,6 +64,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/midi/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render Midi
+         * @description Render MIDI events to audio.
+         *
+         *     Args:
+         *         request: Render request with BPM and MIDI events
+         *
+         *     Returns:
+         *         RenderResponse with audio URL, duration, and sample rate
+         *
+         *     Raises:
+         *         HTTPException: If rendering fails
+         */
+        post: operations["render_midi_api_midi_render_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -352,6 +381,43 @@ export interface components {
              */
             reasoning: string;
         };
+        /**
+         * RenderRequest
+         * @description Request payload for /api/midi/render endpoint.
+         */
+        RenderRequest: {
+            /**
+             * Bpm
+             * @description Tempo in BPM (30-360)
+             */
+            bpm: number;
+            /**
+             * Midi
+             * @description MIDI events to render
+             */
+            midi: components["schemas"]["MidiEvent"][];
+        };
+        /**
+         * RenderResponse
+         * @description Response from /api/midi/render endpoint with audio information.
+         */
+        RenderResponse: {
+            /**
+             * Audio Url
+             * @description URL to the rendered audio file
+             */
+            audio_url: string;
+            /**
+             * Duration Seconds
+             * @description Duration of the audio in seconds
+             */
+            duration_seconds: number;
+            /**
+             * Sample Rate
+             * @description Sample rate of the audio in Hz
+             */
+            sample_rate: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -423,6 +489,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationRestoreResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    render_midi_api_midi_render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderResponse"];
                 };
             };
             /** @description Validation Error */

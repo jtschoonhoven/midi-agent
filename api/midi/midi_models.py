@@ -33,9 +33,7 @@ class ConversationMessage(Base):
     plan_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     midi_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     def __repr__(self) -> str:
         return f"<ConversationMessage(id={self.id}, thread_id={self.thread_id}, role={self.role})>"

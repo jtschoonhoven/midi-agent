@@ -90,6 +90,48 @@
         }
       }
     },
+    "/api/midi/render": {
+      "post": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Render Midi",
+        "description": "Render MIDI events to audio.\n\nArgs:\n    request: Render request with BPM and MIDI events\n\nReturns:\n    RenderResponse with audio URL, duration, and sample rate\n\nRaises:\n    HTTPException: If rendering fails",
+        "operationId": "render_midi_api_midi_render_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -803,6 +845,61 @@
         ],
         "title": "PlanResponse",
         "description": "High-level musical plan from the planning stage."
+      },
+      "RenderRequest": {
+        "properties": {
+          "bpm": {
+            "type": "integer",
+            "exclusiveMaximum": 361.0,
+            "exclusiveMinimum": 29.0,
+            "title": "Bpm",
+            "description": "Tempo in BPM (30-360)"
+          },
+          "midi": {
+            "items": {
+              "$ref": "#/components/schemas/MidiEvent"
+            },
+            "type": "array",
+            "title": "Midi",
+            "description": "MIDI events to render"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bpm",
+          "midi"
+        ],
+        "title": "RenderRequest",
+        "description": "Request payload for /api/midi/render endpoint."
+      },
+      "RenderResponse": {
+        "properties": {
+          "audio_url": {
+            "type": "string",
+            "title": "Audio Url",
+            "description": "URL to the rendered audio file"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Seconds",
+            "description": "Duration of the audio in seconds"
+          },
+          "sample_rate": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Sample Rate",
+            "description": "Sample rate of the audio in Hz"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio_url",
+          "duration_seconds",
+          "sample_rate"
+        ],
+        "title": "RenderResponse",
+        "description": "Response from /api/midi/render endpoint with audio information."
       },
       "ValidationError": {
         "properties": {
