@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Literal, TypedDict
 
+import pydantic
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableConfig
-import pydantic
 
 if TYPE_CHECKING:
     from api.midi.midi_routes import GenerateRequest

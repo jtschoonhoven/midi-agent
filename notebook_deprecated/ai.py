@@ -6,7 +6,6 @@ import pydantic
 import weave
 from langchain.chat_models import BaseChatModel, init_chat_model
 from langchain_core.runnables import RunnableConfig
-
 from midiagent.constants import MIDI_EVENT_TO_HEX, TIME_SIGNATURE_BEATS_PER_MEASURE
 from midiagent.types import Key, MidiEventType, SupportedModel, TimeSignature
 
@@ -135,9 +134,7 @@ class DslResponse(pydantic.BaseModel):
                     value=item.value,
                 )
             )
-        sustain_off = MidiEvent(
-            measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="Sustain", value=0
-        )
+        sustain_off = MidiEvent(measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="Sustain", value=0)
         all_notes_off = MidiEvent(
             measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="AllNotesOff", value=100
         )

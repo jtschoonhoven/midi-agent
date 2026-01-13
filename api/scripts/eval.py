@@ -12,7 +12,6 @@ import weave
 from api.midi.midi_routes import GenerateRequest, Key, ModelName, TimeSignature
 from api.midi.midi_utils import MidiEvent, PlanResponse, run_generation_pipeline
 
-
 # ==========================================================================
 # Evaluation dataset schema
 # ==========================================================================

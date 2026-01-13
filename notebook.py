@@ -7,7 +7,6 @@ app = marimo.App(width="medium", app_title="midi-agent")
 @app.cell
 def _():
     import marimo
-
     from midiagent.midi_widget import MidiWidget
 
     midi = marimo.ui.anywidget(MidiWidget())
@@ -131,7 +130,6 @@ def chat(
     from langchain_core.runnables import RunnableConfig
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, StateGraph
-
     from midiagent.ai import (
         GENERATION_PROMPT,
         PLANNING_PROMPT,
@@ -283,7 +281,7 @@ def _(get_bpm, get_midi_events, get_time_signature, marimo, midi):
     )
     button = marimo.ui.button(label="Play", disabled=(not midi_events), on_click=lambda _: play())
 
-    marimo.vstack([marimo.hstack([button,  loop], justify="start"), table])
+    marimo.vstack([marimo.hstack([button, loop], justify="start"), table])
     return
 
 

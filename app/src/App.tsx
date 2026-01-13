@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { ThemeProvider, CssBaseline, useMediaQuery } from '@mui/material'
-import { ChatInterface } from './components/ChatInterface'
+import ChatInterface from './components/ChatInterface'
 import { lightTheme, darkTheme } from './theme'
 
 function App() {

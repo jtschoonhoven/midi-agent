@@ -12,7 +12,7 @@
           "midi"
         ],
         "summary": "Generate Midi",
-        "description": "Generate MIDI events from a natural language prompt.\n\nArgs:\n    request: Generation request with user_id, thread_id, constraints, and prompt\n    db: Database session\n\nReturns:\n    MidiResponse with plan and list of MIDI events\n\nRaises:\n    HTTPException: If generation fails",
+        "description": "Generate MIDI events from a natural language prompt.\n\nArgs:\n    request: Generation request with thread_id, constraints, and prompt\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    MidiResponse with plan and list of MIDI events\n\nRaises:\n    HTTPException: If generation fails",
         "operationId": "generate_midi_api_midi_generate_post",
         "requestBody": {
           "content": {
@@ -54,7 +54,7 @@
           "midi"
         ],
         "summary": "Restore Conversation",
-        "description": "Restore a previous conversation by user_id and thread_id.\n\nArgs:\n    request: Restore request with user_id and thread_id\n    db: Database session\n\nReturns:\n    ConversationRestoreResponse with full conversation history\n\nRaises:\n    HTTPException: If conversation not found or retrieval fails",
+        "description": "Restore a previous conversation by thread_id.\n\nArgs:\n    request: Restore request with thread_id\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    ConversationRestoreResponse with full conversation history\n\nRaises:\n    HTTPException: If conversation not found or retrieval fails",
         "operationId": "restore_conversation_api_midi_restore_post",
         "requestBody": {
           "content": {
@@ -132,6 +132,158 @@
         }
       }
     },
+    "/api/midi/songs/": {
+      "get": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "List Songs",
+        "description": "List all songs for the current user.\n\nArgs:\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    List of SongResponse objects\n\nRaises:\n    HTTPException: If retrieval fails",
+        "operationId": "list_songs_api_midi_songs__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SongResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Songs Api Midi Songs  Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Create Song",
+        "description": "Create a new song with an empty track.\n\nArgs:\n    request: Song creation request with title, bpm, and key\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongResponse with the new song and its empty track\n\nRaises:\n    HTTPException: If creation fails",
+        "operationId": "create_song_api_midi_songs__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSongRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/songs/{song_id}": {
+      "get": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Get Song",
+        "description": "Get a specific song with all track details and loops.\n\nArgs:\n    song_id: Song identifier (path parameter)\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongResponse with tracks and loops\n\nRaises:\n    HTTPException: If song not found or access denied",
+        "operationId": "get_song_api_midi_songs__song_id__get",
+        "parameters": [
+          {
+            "name": "song_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Song Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/loops/{loop_id}/chats": {
+      "get": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Get Loop Chats",
+        "description": "Get complete chat history for a specific loop.\n\nArgs:\n    loop_id: Loop identifier (path parameter)\n    db: Database session\n\nReturns:\n    ChatHistoryResponse with all messages\n\nRaises:\n    HTTPException: If loop not found",
+        "operationId": "get_loop_chats_api_midi_loops__loop_id__chats_get",
+        "parameters": [
+          {
+            "name": "loop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Loop Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatHistoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -158,6 +310,97 @@
   },
   "components": {
     "schemas": {
+      "ChatHistoryResponse": {
+        "properties": {
+          "loop_id": {
+            "type": "string",
+            "title": "Loop Id",
+            "description": "Loop ID"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "Chat messages in chronological order"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "description": "Total number of messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loop_id",
+          "messages",
+          "message_count"
+        ],
+        "title": "ChatHistoryResponse",
+        "description": "Response model for chat history."
+      },
+      "ChatMessageResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Chat message ID"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Message role: 'user' or 'assistant'"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "description": "Message content"
+          },
+          "midi_events": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Midi Events",
+            "description": "MIDI events (if any)"
+          },
+          "loop_id": {
+            "type": "string",
+            "title": "Loop Id",
+            "description": "ID of the associated loop"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of message creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "msg",
+          "loop_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatMessageResponse",
+        "description": "Response model for chat messages."
+      },
       "ConversationMessage": {
         "properties": {
           "role": {
@@ -288,12 +531,6 @@
       },
       "ConversationRestoreRequest": {
         "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "User Id",
-            "description": "User identifier"
-          },
           "thread_id": {
             "type": "string",
             "format": "uuid",
@@ -303,11 +540,10 @@
         },
         "type": "object",
         "required": [
-          "user_id",
           "thread_id"
         ],
         "title": "ConversationRestoreRequest",
-        "description": "Request to restore a conversation by user_id and thread_id."
+        "description": "Request to restore a conversation by thread_id."
       },
       "ConversationRestoreResponse": {
         "properties": {
@@ -347,14 +583,62 @@
         "title": "ConversationRestoreResponse",
         "description": "Response containing conversation history."
       },
+      "CreateSongRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Song title (optional)"
+          },
+          "bpm": {
+            "type": "integer",
+            "exclusiveMaximum": 361.0,
+            "exclusiveMinimum": 29.0,
+            "title": "Bpm",
+            "description": "Tempo in BPM (30-360)"
+          },
+          "key": {
+            "type": "string",
+            "enum": [
+              "Ab",
+              "A",
+              "A#",
+              "Bb",
+              "B",
+              "C",
+              "C#",
+              "Db",
+              "D",
+              "D#",
+              "Eb",
+              "E",
+              "F",
+              "F#",
+              "Gb",
+              "G",
+              "G#"
+            ],
+            "title": "Key",
+            "description": "Musical key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bpm",
+          "key"
+        ],
+        "title": "CreateSongRequest",
+        "description": "Request payload for creating a new song."
+      },
       "GenerateRequest": {
         "properties": {
-          "user_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "User Id",
-            "description": "User identifier for tracking"
-          },
           "thread_id": {
             "type": "string",
             "format": "uuid",
@@ -476,7 +760,6 @@
         },
         "type": "object",
         "required": [
-          "user_id",
           "thread_id",
           "plan_model",
           "generate_model",
@@ -497,6 +780,67 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LoopResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Loop ID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Loop title"
+          },
+          "measures": {
+            "type": "integer",
+            "title": "Measures",
+            "description": "Number of measures in the loop"
+          },
+          "repeat": {
+            "type": "integer",
+            "title": "Repeat",
+            "description": "Number of times to repeat the loop"
+          },
+          "midi_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Midi Events",
+            "description": "MIDI events in the loop"
+          },
+          "track_id": {
+            "type": "string",
+            "title": "Track Id",
+            "description": "ID of the parent track"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "measures",
+          "repeat",
+          "midi_events",
+          "track_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LoopResponse",
+        "description": "Response model for MIDI loops."
       },
       "MidiEvent": {
         "properties": {
@@ -900,6 +1244,113 @@
         ],
         "title": "RenderResponse",
         "description": "Response from /api/midi/render endpoint with audio information."
+      },
+      "SongResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Song ID"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User ID who owns the song"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Song title"
+          },
+          "bpm": {
+            "type": "integer",
+            "title": "Bpm",
+            "description": "Tempo in BPM"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Musical key"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/TrackResponse"
+            },
+            "type": "array",
+            "title": "Tracks",
+            "description": "Tracks in this song"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "title",
+          "bpm",
+          "key",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SongResponse",
+        "description": "Response model for MIDI songs including tracks and loops."
+      },
+      "TrackResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Track ID"
+          },
+          "song_id": {
+            "type": "string",
+            "title": "Song Id",
+            "description": "ID of the parent song"
+          },
+          "midi_channel": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Midi Channel",
+            "description": "MIDI channel (1-16)"
+          },
+          "loops": {
+            "items": {
+              "$ref": "#/components/schemas/LoopResponse"
+            },
+            "type": "array",
+            "title": "Loops",
+            "description": "Loops in this track"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "song_id",
+          "midi_channel",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TrackResponse",
+        "description": "Response model for MIDI tracks."
       },
       "ValidationError": {
         "properties": {

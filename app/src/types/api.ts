@@ -18,8 +18,9 @@ export interface paths {
          * @description Generate MIDI events from a natural language prompt.
          *
          *     Args:
-         *         request: Generation request with user_id, thread_id, constraints, and prompt
+         *         request: Generation request with thread_id, constraints, and prompt
          *         db: Database session
+         *         user_id: User ID from Authorization header
          *
          *     Returns:
          *         MidiResponse with plan and list of MIDI events
@@ -45,11 +46,12 @@ export interface paths {
         put?: never;
         /**
          * Restore Conversation
-         * @description Restore a previous conversation by user_id and thread_id.
+         * @description Restore a previous conversation by thread_id.
          *
          *     Args:
-         *         request: Restore request with user_id and thread_id
+         *         request: Restore request with thread_id
          *         db: Database session
+         *         user_id: User ID from Authorization header
          *
          *     Returns:
          *         ConversationRestoreResponse with full conversation history
@@ -93,6 +95,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/midi/songs/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Songs
+         * @description List all songs for the current user.
+         *
+         *     Args:
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         List of SongResponse objects
+         *
+         *     Raises:
+         *         HTTPException: If retrieval fails
+         */
+        get: operations["list_songs_api_midi_songs__get"];
+        put?: never;
+        /**
+         * Create Song
+         * @description Create a new song with an empty track.
+         *
+         *     Args:
+         *         request: Song creation request with title, bpm, and key
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         SongResponse with the new song and its empty track
+         *
+         *     Raises:
+         *         HTTPException: If creation fails
+         */
+        post: operations["create_song_api_midi_songs__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/songs/{song_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Song
+         * @description Get a specific song with all track details and loops.
+         *
+         *     Args:
+         *         song_id: Song identifier (path parameter)
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         SongResponse with tracks and loops
+         *
+         *     Raises:
+         *         HTTPException: If song not found or access denied
+         */
+        get: operations["get_song_api_midi_songs__song_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/loops/{loop_id}/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Loop Chats
+         * @description Get complete chat history for a specific loop.
+         *
+         *     Args:
+         *         loop_id: Loop identifier (path parameter)
+         *         db: Database session
+         *
+         *     Returns:
+         *         ChatHistoryResponse with all messages
+         *
+         *     Raises:
+         *         HTTPException: If loop not found
+         */
+        get: operations["get_loop_chats_api_midi_loops__loop_id__chats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -117,6 +225,70 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ChatHistoryResponse
+         * @description Response model for chat history.
+         */
+        ChatHistoryResponse: {
+            /**
+             * Loop Id
+             * @description Loop ID
+             */
+            loop_id: string;
+            /**
+             * Messages
+             * @description Chat messages in chronological order
+             */
+            messages: components["schemas"]["ChatMessageResponse"][];
+            /**
+             * Message Count
+             * @description Total number of messages
+             */
+            message_count: number;
+        };
+        /**
+         * ChatMessageResponse
+         * @description Response model for chat messages.
+         */
+        ChatMessageResponse: {
+            /**
+             * Id
+             * @description Chat message ID
+             */
+            id: string;
+            /**
+             * Role
+             * @description Message role: 'user' or 'assistant'
+             */
+            role: string;
+            /**
+             * Msg
+             * @description Message content
+             */
+            msg: string;
+            /**
+             * Midi Events
+             * @description MIDI events (if any)
+             */
+            midi_events?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Loop Id
+             * @description ID of the associated loop
+             */
+            loop_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of message creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
         /**
          * ConversationMessage
          * @description A message in the conversation history.
@@ -184,15 +356,9 @@ export interface components {
         };
         /**
          * ConversationRestoreRequest
-         * @description Request to restore a conversation by user_id and thread_id.
+         * @description Request to restore a conversation by thread_id.
          */
         ConversationRestoreRequest: {
-            /**
-             * User Id
-             * Format: uuid
-             * @description User identifier
-             */
-            user_id: string;
             /**
              * Thread Id
              * Format: uuid
@@ -229,16 +395,32 @@ export interface components {
             message_count: number;
         };
         /**
+         * CreateSongRequest
+         * @description Request payload for creating a new song.
+         */
+        CreateSongRequest: {
+            /**
+             * Title
+             * @description Song title (optional)
+             */
+            title?: string | null;
+            /**
+             * Bpm
+             * @description Tempo in BPM (30-360)
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             * @enum {string}
+             */
+            key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#";
+        };
+        /**
          * GenerateRequest
          * @description Request payload for /api/midi/generate endpoint.
          */
         GenerateRequest: {
-            /**
-             * User Id
-             * Format: uuid
-             * @description User identifier for tracking
-             */
-            user_id: string;
             /**
              * Thread Id
              * Format: uuid
@@ -287,6 +469,54 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * LoopResponse
+         * @description Response model for MIDI loops.
+         */
+        LoopResponse: {
+            /**
+             * Id
+             * @description Loop ID
+             */
+            id: string;
+            /**
+             * Title
+             * @description Loop title
+             */
+            title: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop
+             */
+            measures: number;
+            /**
+             * Repeat
+             * @description Number of times to repeat the loop
+             */
+            repeat: number;
+            /**
+             * Midi Events
+             * @description MIDI events in the loop
+             */
+            midi_events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
         };
         /**
          * MidiEvent
@@ -418,6 +648,88 @@ export interface components {
              */
             sample_rate: number;
         };
+        /**
+         * SongResponse
+         * @description Response model for MIDI songs including tracks and loops.
+         */
+        SongResponse: {
+            /**
+             * Id
+             * @description Song ID
+             */
+            id: string;
+            /**
+             * User Id
+             * @description User ID who owns the song
+             */
+            user_id: string;
+            /**
+             * Title
+             * @description Song title
+             */
+            title: string;
+            /**
+             * Bpm
+             * @description Tempo in BPM
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             */
+            key: string;
+            /**
+             * Tracks
+             * @description Tracks in this song
+             */
+            tracks?: components["schemas"]["TrackResponse"][];
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
+        /**
+         * TrackResponse
+         * @description Response model for MIDI tracks.
+         */
+        TrackResponse: {
+            /**
+             * Id
+             * @description Track ID
+             */
+            id: string;
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Midi Channel
+             * @description MIDI channel (1-16)
+             */
+            midi_channel: number;
+            /**
+             * Loops
+             * @description Loops in this track
+             */
+            loops?: components["schemas"]["LoopResponse"][];
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -522,6 +834,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RenderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_songs_api_midi_songs__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongResponse"][];
+                };
+            };
+        };
+    };
+    create_song_api_midi_songs__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSongRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_song_api_midi_songs__song_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                song_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_loop_chats_api_midi_loops__loop_id__chats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatHistoryResponse"];
                 };
             };
             /** @description Validation Error */
