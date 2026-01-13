@@ -1,7 +1,6 @@
 # Mapping from model name to (provider, model) tuple
 from api.chats.chat_types import ModelName, ModelProvider
 
-
 MODEL_PROVIDER_MAP: dict[ModelName, tuple[ModelProvider, ModelName]] = {
     "claude-haiku-4-5": ("anthropic", "claude-haiku-4-5"),
     "claude-sonnet-4-5": ("anthropic", "claude-sonnet-4-5"),

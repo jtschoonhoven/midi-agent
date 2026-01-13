@@ -171,6 +171,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/midi/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Chat
+         * @description Create a new user chat message for a loop.
+         *
+         *     Args:
+         *         request: CreateChatRequest with loop_id and msg
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         ChatMessageResponse with the newly created message
+         *
+         *     Raises:
+         *         HTTPException: If loop not found or access denied
+         */
+        post: operations["create_chat_api_midi_chats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/loops/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Loop
+         * @description Create a new MIDI loop.
+         *
+         *     Args:
+         *         request: CreateLoopRequest with track_id and measures
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         LoopDetailResponse with the newly created loop
+         *
+         *     Raises:
+         *         HTTPException: If track not found or access denied
+         */
+        post: operations["create_loop_api_midi_loops__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/midi/loops/{loop_id}/chats": {
         parameters: {
             query?: never;
@@ -179,7 +241,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Loop Chats
+         * Get Chats
          * @description Get complete chat history for a specific loop.
          *
          *     Args:
@@ -192,7 +254,7 @@ export interface paths {
          *     Raises:
          *         HTTPException: If loop not found
          */
-        get: operations["get_loop_chats_api_midi_loops__loop_id__chats_get"];
+        get: operations["get_chats_api_midi_loops__loop_id__chats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -388,11 +450,44 @@ export interface components {
              * @description Conversation messages in chronological order
              */
             messages: components["schemas"]["ConversationMessageResponse"][];
+        };
+        /**
+         * CreateChatRequest
+         * @description Request model for creating a new chat message.
+         */
+        CreateChatRequest: {
             /**
-             * Message Count
-             * @description Total number of messages
+             * Loop Id
+             * @description ID of the loop to add the chat message to
              */
-            message_count: number;
+            loop_id: string;
+            /**
+             * Msg
+             * @description User message content
+             */
+            msg: string;
+        };
+        /**
+         * CreateLoopRequest
+         * @description Request model for creating a new loop.
+         */
+        CreateLoopRequest: {
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop (1-32)
+             */
+            measures: number;
+            /**
+             * Repeat
+             * @description Number of times to repeat the loop (default: 1)
+             * @default 1
+             */
+            repeat: number;
         };
         /**
          * CreateSongRequest
@@ -471,8 +566,56 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * LoopDetailResponse
+         * @description Response model for MIDI loops, including chat message history.
+         */
+        LoopDetailResponse: {
+            /**
+             * Id
+             * @description Loop ID
+             */
+            id: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop
+             */
+            measures: number;
+            /**
+             * Repeat
+             * @description Number of times to repeat the loop
+             */
+            repeat: number;
+            /**
+             * Midi Events
+             * @description MIDI events in the loop
+             */
+            midi_events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
+             * Chats
+             * @description Chat messages in chronological order
+             */
+            chats?: components["schemas"]["ChatMessageResponse"][];
+        };
+        /**
          * LoopResponse
-         * @description Response model for MIDI loops.
+         * @description Response model for MIDI loops, excluding chat message history.
          */
         LoopResponse: {
             /**
@@ -480,11 +623,6 @@ export interface components {
              * @description Loop ID
              */
             id: string;
-            /**
-             * Title
-             * @description Loop title
-             */
-            title: string;
             /**
              * Measures
              * @description Number of measures in the loop
@@ -967,7 +1105,73 @@ export interface operations {
             };
         };
     };
-    get_loop_chats_api_midi_loops__loop_id__chats_get: {
+    create_chat_api_midi_chats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_loop_api_midi_loops__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLoopRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_chats_api_midi_loops__loop_id__chats_get: {
         parameters: {
             query?: never;
             header?: never;

@@ -4,22 +4,30 @@ import os
 import shutil
 from pathlib import Path
 
+import weave
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-import weave
 
-from api.database import init_db
-from api.songs.song_routes import router as song_router
 from api.audio.audio_routes import router as audio_router
-from api.chats.chat_routes import router as chat_router
-
+from api.database import init_db
+from api.loops.loop_routes import router as loop_router
+from api.songs.song_routes import router as song_router
 
 app = FastAPI(
     title="MIDI Agent API",
     description="AI-powered MIDI generation from natural language prompts",
     version="0.1.0",
+)
+
+# Configure CORS - allow all origins for demo purposes
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # Must be False when allow_origins is "*"
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -52,19 +60,10 @@ audio_output_dir = Path(__file__).parent.parent / "audio_output"
 if audio_output_dir.exists():
     app.mount("/audio", StaticFiles(directory=str(audio_output_dir)), name="audio")
 
-# Configure CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and common React dev servers
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Register routers
 app.include_router(song_router)
 app.include_router(audio_router)
-app.include_router(chat_router)
+app.include_router(loop_router)
 
 
 @app.get("/health")

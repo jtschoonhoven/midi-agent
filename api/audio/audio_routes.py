@@ -67,8 +67,6 @@ async def render_midi(request: RenderRequest) -> RenderResponse:
 
         return RenderResponse(audio_url=audio_url, duration_seconds=duration, sample_rate=actual_sample_rate)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=500, detail=f"Soundfont not found: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Soundfont not found: {str(e)}") from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MIDI rendering failed: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"MIDI rendering failed: {str(e)}") from e

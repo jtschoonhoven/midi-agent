@@ -11,12 +11,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.audio.audio_types import MidiEvent
+from api.chats.chat_models import ChatMessage
 from api.database import Base, get_db
+from api.loops.loop_models import MidiLoop
 from api.main import app
 from api.songs.song_models import MidiSong
 from api.tracks.track_models import MidiTrack
-from api.loops.loop_models import MidiLoop
-from api.chats.chat_models import ChatMessage
 
 
 @pytest.fixture(scope="function", autouse=True)

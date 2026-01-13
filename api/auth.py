@@ -24,6 +24,10 @@ async def get_current_user_id(request: Request) -> UUID:
     Raises:
         HTTPException: If header is missing or invalid
     """
+    # Skip auth check for OPTIONS requests (CORS preflight)
+    if request.method == "OPTIONS":
+        return UUID("00000000-0000-0000-0000-000000000000")
+
     authorization = request.headers.get("authorization")
 
     if not authorization:
@@ -32,5 +36,5 @@ async def get_current_user_id(request: Request) -> UUID:
     try:
         user_id = UUID(authorization)
         return user_id
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid authorization token (must be a valid UUID)")
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail="Invalid authorization token (must be a valid UUID)") from e

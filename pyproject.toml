@@ -49,6 +49,7 @@ select = [
 ]
 ignore = [
     "E501", # line too long (handled by formatter)
+    "B008", # function call in default argument (standard FastAPI pattern with Depends)
     "B018", # useless expression (needed for marimo notebooks)
 ]
 

@@ -1,30 +1,20 @@
 """FastAPI routes for MIDI generation."""
 
 import random
-import shutil
-from pathlib import Path
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pydantic
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
-from api.audio.audio_types import MidiEvent
 from api.auth import get_current_user_id
 from api.database import get_db
+from api.loops.loop_routes import LoopResponse
+from api.songs import song_models
 from api.songs.song_constants import ADJECTIVES, NOUNS
-from api.songs.song_models import MidiSong
-from api.tracks.track_models import MidiTrack
-from api.loops.loop_models import MidiLoop
-from api.chats.chat_models import (
-    ConversationMessage,
-    get_conversation_history,
-    store_assistant_message,
-    store_user_message,
-)
-from api.songs.song_utils import PlanResponse, run_generation_pipeline
+from api.tracks import track_models
 
 # Type aliases
 Key = Literal["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
@@ -54,11 +44,11 @@ class GenerateRequest(pydantic.BaseModel):
     prompt: str = pydantic.Field(min_length=1, description="User's musical generation request")
 
 
-class MidiResponse(pydantic.BaseModel):
-    """Response from /api/midi/generate endpoint including plan and MIDI."""
+# class MidiResponse(pydantic.BaseModel):
+#     """Response from /api/midi/generate endpoint including plan and MIDI."""
 
-    plan: PlanResponse = pydantic.Field(description="Musical plan from the planning stage")
-    midi: list[MidiEvent] = pydantic.Field(description="Generated MIDI events")
+#     plan: "song_models.PlanResponse" = pydantic.Field(description="Musical plan from the planning stage")
+#     midi: list[MidiEvent] = pydantic.Field(description="Generated MIDI events")
 
 
 class ConversationRestoreRequest(pydantic.BaseModel):
@@ -88,53 +78,27 @@ class ConversationRestoreResponse(pydantic.BaseModel):
 
     user_id: UUID = pydantic.Field(description="User identifier")
     thread_id: UUID = pydantic.Field(description="Thread identifier")
-    messages: list[ConversationMessageResponse] = pydantic.Field(description="Conversation messages in chronological order")
-    message_count: int = pydantic.Field(description="Total number of messages")
+    messages: list[ConversationMessageResponse] = pydantic.Field(
+        description="Conversation messages in chronological order"
+    )
 
 
-class RenderRequest(pydantic.BaseModel):
-    """Request payload for /api/midi/render endpoint."""
-
-    bpm: int = pydantic.Field(gt=29, lt=361, description="Tempo in BPM (30-360)")
-    midi: list[MidiEvent] = pydantic.Field(description="MIDI events to render")
+#     message_count: int = pydantic.Field(description="Total number of messages")
 
 
-class RenderResponse(pydantic.BaseModel):
-    """Response from /api/midi/render endpoint with audio information."""
+# class RenderRequest(pydantic.BaseModel):
+#     """Request payload for /api/midi/render endpoint."""
 
-    audio_url: str = pydantic.Field(description="URL to the rendered audio file")
-    duration_seconds: float = pydantic.Field(gt=0, description="Duration of the audio in seconds")
-    sample_rate: int = pydantic.Field(gt=0, description="Sample rate of the audio in Hz")
-
-
-# Response models for new RESTful endpoints
-class ChatMessageResponse(pydantic.BaseModel):
-    """Response model for chat messages."""
-
-    id: str = pydantic.Field(description="Chat message ID")
-    role: str = pydantic.Field(description="Message role: 'user' or 'assistant'")
-    msg: str = pydantic.Field(description="Message content")
-    midi_events: list[dict] | None = pydantic.Field(None, description="MIDI events (if any)")
-    loop_id: str = pydantic.Field(description="ID of the associated loop")
-    created_at: str = pydantic.Field(description="ISO timestamp of message creation")
-    updated_at: str = pydantic.Field(description="ISO timestamp of last update")
-
-    model_config = ConfigDict(from_attributes=True)
+#     bpm: int = pydantic.Field(gt=29, lt=361, description="Tempo in BPM (30-360)")
+#     midi: list[MidiEvent] = pydantic.Field(description="MIDI events to render")
 
 
-class LoopResponse(pydantic.BaseModel):
-    """Response model for MIDI loops."""
+# class RenderResponse(pydantic.BaseModel):
+#     """Response from /api/midi/render endpoint with audio information."""
 
-    id: str = pydantic.Field(description="Loop ID")
-    title: str = pydantic.Field(description="Loop title")
-    measures: int = pydantic.Field(description="Number of measures in the loop")
-    repeat: int = pydantic.Field(description="Number of times to repeat the loop")
-    midi_events: list[dict] = pydantic.Field(description="MIDI events in the loop")
-    track_id: str = pydantic.Field(description="ID of the parent track")
-    created_at: str = pydantic.Field(description="ISO timestamp of creation")
-    updated_at: str = pydantic.Field(description="ISO timestamp of last update")
-
-    model_config = ConfigDict(from_attributes=True)
+#     audio_url: str = pydantic.Field(description="URL to the rendered audio file")
+#     duration_seconds: float = pydantic.Field(gt=0, description="Duration of the audio in seconds")
+#     sample_rate: int = pydantic.Field(gt=0, description="Sample rate of the audio in Hz")
 
 
 class TrackResponse(pydantic.BaseModel):
@@ -179,149 +143,139 @@ class CreateSongRequest(pydantic.BaseModel):
     key: Key = pydantic.Field(description="Musical key")
 
 
-class ChatHistoryResponse(pydantic.BaseModel):
-    """Response model for chat history."""
-
-    loop_id: str = pydantic.Field(description="Loop ID")
-    messages: list[ChatMessageResponse] = pydantic.Field(description="Chat messages in chronological order")
-    message_count: int = pydantic.Field(description="Total number of messages")
-
-
-
-
 router = APIRouter(prefix="/api/midi", tags=["midi"])
 
 
-@router.post("/generate", response_model=MidiResponse)
-async def generate_midi(
-    request: GenerateRequest,
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user_id),
-) -> MidiResponse:
-    """
-    Generate MIDI events from a natural language prompt.
+# @router.post("/generate", response_model=MidiResponse)
+# async def generate_midi(
+#     request: GenerateRequest,
+#     db: Session = Depends(get_db),
+#     user_id: UUID = Depends(get_current_user_id),
+# ) -> MidiResponse:
+#     """
+#     Generate MIDI events from a natural language prompt.
 
-    Args:
-        request: Generation request with thread_id, constraints, and prompt
-        db: Database session
-        user_id: User ID from Authorization header
+#     Args:
+#         request: Generation request with thread_id, constraints, and prompt
+#         db: Database session
+#         user_id: User ID from Authorization header
 
-    Returns:
-        MidiResponse with plan and list of MIDI events
+#     Returns:
+#         MidiResponse with plan and list of MIDI events
 
-    Raises:
-        HTTPException: If generation fails
-    """
-    try:
-        # Store user message
-        store_user_message(
-            db=db,
-            user_id=user_id,
-            thread_id=request.thread_id,
-            prompt=request.prompt,
-            plan_model=request.plan_model,
-            generate_model=request.generate_model,
-            key=request.key,
-            bpm=request.bpm,
-            time_signature=request.time_signature,
-            measures=request.measures,
-        )
+#     Raises:
+#         HTTPException: If generation fails
+#     """
+#     try:
+#         # Store user message
+#         store_user_message(
+#             db=db,
+#             user_id=user_id,
+#             thread_id=request.thread_id,
+#             prompt=request.prompt,
+#             plan_model=request.plan_model,
+#             generate_model=request.generate_model,
+#             key=request.key,
+#             bpm=request.bpm,
+#             time_signature=request.time_signature,
+#             measures=request.measures,
+#         )
 
-        # Generate MIDI
-        plan, midi_events = run_generation_pipeline(request)
-        response = MidiResponse(plan=plan, midi=midi_events)
+#         # Generate MIDI
+#         plan, midi_events = run_generation_pipeline(request)
+#         response = MidiResponse(plan=plan, midi=midi_events)
 
-        # Store assistant response
-        store_assistant_message(
-            db=db,
-            user_id=user_id,
-            thread_id=request.thread_id,
-            content=plan.reasoning,
-            plan_data={
-                "key": plan.key,
-                "bpm": plan.bpm,
-                "time_signature": plan.time_signature,
-                "measures": plan.measures,
-                "style": plan.style,
-                "chord_progression": plan.chord_progression,
-                "reasoning": plan.reasoning,
-            },
-            midi_events=[
-                {
-                    "measure": event.measure,
-                    "beat": event.beat,
-                    "beat_div4": event.beat_div4,
-                    "beat_div16": event.beat_div16,
-                    "event": event.event,
-                    "value": event.value,
-                }
-                for event in midi_events
-            ],
-        )
+#         # Store assistant response
+#         store_assistant_message(
+#             db=db,
+#             user_id=user_id,
+#             thread_id=request.thread_id,
+#             content=plan.reasoning,
+#             plan_data={
+#                 "key": plan.key,
+#                 "bpm": plan.bpm,
+#                 "time_signature": plan.time_signature,
+#                 "measures": plan.measures,
+#                 "style": plan.style,
+#                 "chord_progression": plan.chord_progression,
+#                 "reasoning": plan.reasoning,
+#             },
+#             midi_events=[
+#                 {
+#                     "measure": event.measure,
+#                     "beat": event.beat,
+#                     "beat_div4": event.beat_div4,
+#                     "beat_div16": event.beat_div16,
+#                     "event": event.event,
+#                     "value": event.value,
+#                 }
+#                 for event in midi_events
+#             ],
+#         )
 
-        return response
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MIDI generation failed: {str(e)}")
+#         return response
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"MIDI generation failed: {str(e)}")
 
 
-@router.post("/restore", response_model=ConversationRestoreResponse)
-async def restore_conversation(
-    request: ConversationRestoreRequest,
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user_id),
-) -> ConversationRestoreResponse:
-    """
-    Restore a previous conversation by thread_id.
+# @router.post("/restore", response_model=ConversationRestoreResponse)
+# async def restore_conversation(
+#     request: ConversationRestoreRequest,
+#     db: Session = Depends(get_db),
+#     user_id: UUID = Depends(get_current_user_id),
+# ) -> ConversationRestoreResponse:
+#     """
+#     Restore a previous conversation by thread_id.
 
-    Args:
-        request: Restore request with thread_id
-        db: Database session
-        user_id: User ID from Authorization header
+#     Args:
+#         request: Restore request with thread_id
+#         db: Database session
+#         user_id: User ID from Authorization header
 
-    Returns:
-        ConversationRestoreResponse with full conversation history
+#     Returns:
+#         ConversationRestoreResponse with full conversation history
 
-    Raises:
-        HTTPException: If conversation not found or retrieval fails
-    """
-    try:
-        # Retrieve conversation history
-        messages = get_conversation_history(db, user_id, request.thread_id)
+#     Raises:
+#         HTTPException: If conversation not found or retrieval fails
+#     """
+#     try:
+#         # Retrieve conversation history
+#         messages = get_conversation_history(db, user_id, request.thread_id)
 
-        # Return 404 if no conversation found
-        if not messages:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+#         # Return 404 if no conversation found
+#         if not messages:
+#             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Convert to response format
-        conversation_messages = [
-            ConversationMessageResponse(
-                role=msg.role,
-                content=msg.content,
-                plan_model=msg.plan_model,
-                generate_model=msg.generate_model,
-                key=msg.key,
-                bpm=msg.bpm,
-                time_signature=msg.time_signature,
-                measures=msg.measures,
-                plan_data=msg.plan_data,
-                midi_events=msg.midi_events,
-                created_at=msg.created_at.isoformat(),
-            )
-            for msg in messages
-        ]
+#         # Convert to response format
+#         conversation_messages = [
+#             ConversationMessageResponse(
+#                 role=msg.role,
+#                 content=msg.content,
+#                 plan_model=msg.plan_model,
+#                 generate_model=msg.generate_model,
+#                 key=msg.key,
+#                 bpm=msg.bpm,
+#                 time_signature=msg.time_signature,
+#                 measures=msg.measures,
+#                 plan_data=msg.plan_data,
+#                 midi_events=msg.midi_events,
+#                 created_at=msg.created_at.isoformat(),
+#             )
+#             for msg in messages
+#         ]
 
-        return ConversationRestoreResponse(
-            user_id=user_id,
-            thread_id=request.thread_id,
-            messages=conversation_messages,
-            message_count=len(conversation_messages),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Conversation restoration failed: {str(e)}")
+#         return ConversationRestoreResponse(
+#             user_id=user_id,
+#             thread_id=request.thread_id,
+#             messages=conversation_messages,
+#             message_count=len(conversation_messages),
+#         )
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Conversation restoration failed: {str(e)}")
 
 
 @router.post("/songs/", response_model=SongDetailResponse)
@@ -353,7 +307,7 @@ async def create_song(
             title = f"{adjective} {noun}"
 
         # Create the song
-        song = MidiSong(
+        song = song_models.MidiSong(
             user_id=str(user_id),
             title=title,
             bpm=request.bpm,
@@ -363,7 +317,7 @@ async def create_song(
         db.flush()  # Flush to get the song ID without committing
 
         # Create an empty track with default MIDI channel 1
-        track = MidiTrack(
+        track = track_models.MidiTrack(
             song_id=song.id,
             midi_channel=1,
         )
@@ -393,7 +347,7 @@ async def create_song(
         )
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create song: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create song: {str(e)}") from e
 
 
 @router.get("/songs/", response_model=list[SongResponse])
@@ -416,9 +370,9 @@ async def list_songs(
     """
     try:
         songs = (
-            db.query(MidiSong)
-            .filter(MidiSong.user_id == str(user_id))
-            .order_by(MidiSong.created_at.desc())
+            db.query(song_models.MidiSong)
+            .filter(song_models.MidiSong.user_id == str(user_id))
+            .order_by(song_models.MidiSong.created_at.desc())
             .all()
         )
 
@@ -434,7 +388,7 @@ async def list_songs(
             for song in songs
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve songs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve songs: {str(e)}") from e
 
 
 @router.get("/songs/{song_id}", response_model=SongDetailResponse)
@@ -458,7 +412,11 @@ async def get_song(
         HTTPException: If song not found or access denied
     """
     try:
-        song = db.query(MidiSong).filter(MidiSong.id == song_id, MidiSong.user_id == str(user_id)).first()
+        song = (
+            db.query(song_models.MidiSong)
+            .filter(song_models.MidiSong.id == song_id, song_models.MidiSong.user_id == str(user_id))
+            .first()
+        )
 
         if not song:
             raise HTTPException(status_code=404, detail="Song not found or access denied")
@@ -472,7 +430,6 @@ async def get_song(
                 loops=[
                     LoopResponse(
                         id=loop.id,
-                        title=loop.title,
                         measures=loop.measures,
                         repeat=loop.repeat,
                         midi_events=loop.midi_events,
@@ -500,6 +457,4 @@ async def get_song(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve song: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve song: {str(e)}") from e

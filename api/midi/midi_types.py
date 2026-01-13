@@ -1,6 +1,5 @@
 from typing import Literal
 
-
 MidiEventType = Literal[
     "C-1",
     "C#-1",

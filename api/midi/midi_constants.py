@@ -1,6 +1,5 @@
 from api.midi.midi_types import MidiEventType
 
-
 MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "C-1": (0x90, 0),
     "C#-1": (0x90, 1),

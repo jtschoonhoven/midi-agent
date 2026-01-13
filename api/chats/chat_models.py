@@ -1,13 +1,17 @@
 """SQLAlchemy models for chat messages and conversations."""
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
+from api.loops import loop_routes
+
+if TYPE_CHECKING:
+    from api.loops.loop_models import MidiLoop
 
 
 class ChatMessage(Base):
@@ -33,6 +37,17 @@ class ChatMessage(Base):
 
     def __repr__(self) -> str:
         return f"<ChatMessage(id={self.id}, role={self.role}, loop_id={self.loop_id})>"
+
+    def to_response(self) -> "loop_routes.ChatMessageResponse":
+        return loop_routes.ChatMessageResponse(
+            id=self.id,
+            role=self.role,
+            msg=self.msg,
+            midi_events=self.midi_events,
+            loop_id=self.loop_id,
+            created_at=self.created_at.isoformat(),
+            updated_at=self.updated_at.isoformat(),
+        )
 
 
 # Legacy support - keep old ConversationMessage model for backward compatibility

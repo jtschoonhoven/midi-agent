@@ -1,12 +1,17 @@
 """SQLAlchemy models for tracks."""
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
+
+if TYPE_CHECKING:
+    from api.loops.loop_models import MidiLoop
+    from api.songs.song_models import MidiSong
 
 
 class MidiTrack(Base):

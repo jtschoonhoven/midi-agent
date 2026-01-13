@@ -279,7 +279,7 @@ export default function ChatInterface() {
                 {/* Right column: Loop cards */}
                 <Box sx={{ display: "flex", gap: 2, overflowX: "auto", pb: 1 }}>
                   {/* Loop cards */}
-                  {track.loops.map((loop) => (
+                  {track.loops.map((loop, index) => (
                     <Card
                       key={loop.id}
                       sx={{
@@ -289,7 +289,7 @@ export default function ChatInterface() {
                     >
                       <CardContent>
                         <Typography variant="subtitle2" gutterBottom>
-                          {loop.title}
+                          Loop {index + 1}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {loop.measures} measures • {loop.midi_events.length} events

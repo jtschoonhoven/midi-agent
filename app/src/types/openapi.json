@@ -241,14 +241,98 @@
         }
       }
     },
-    "/api/midi/loops/{loop_id}/chats": {
-      "get": {
+    "/api/midi/chats": {
+      "post": {
         "tags": [
           "chats"
         ],
-        "summary": "Get Loop Chats",
+        "summary": "Create Chat",
+        "description": "Create a new user chat message for a loop.\n\nArgs:\n    request: CreateChatRequest with loop_id and msg\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    ChatMessageResponse with the newly created message\n\nRaises:\n    HTTPException: If loop not found or access denied",
+        "operationId": "create_chat_api_midi_chats_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/loops/": {
+      "post": {
+        "tags": [
+          "loops"
+        ],
+        "summary": "Create Loop",
+        "description": "Create a new MIDI loop.\n\nArgs:\n    request: CreateLoopRequest with track_id and measures\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    LoopDetailResponse with the newly created loop\n\nRaises:\n    HTTPException: If track not found or access denied",
+        "operationId": "create_loop_api_midi_loops__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLoopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/loops/{loop_id}/chats": {
+      "get": {
+        "tags": [
+          "loops"
+        ],
+        "summary": "Get Chats",
         "description": "Get complete chat history for a specific loop.\n\nArgs:\n    loop_id: Loop identifier (path parameter)\n    db: Database session\n\nReturns:\n    ChatHistoryResponse with all messages\n\nRaises:\n    HTTPException: If loop not found",
-        "operationId": "get_loop_chats_api_midi_loops__loop_id__chats_get",
+        "operationId": "get_chats_api_midi_loops__loop_id__chats_get",
         "parameters": [
           {
             "name": "loop_id",
@@ -566,22 +650,68 @@
             "type": "array",
             "title": "Messages",
             "description": "Conversation messages in chronological order"
-          },
-          "message_count": {
-            "type": "integer",
-            "title": "Message Count",
-            "description": "Total number of messages"
           }
         },
         "type": "object",
         "required": [
           "user_id",
           "thread_id",
-          "messages",
-          "message_count"
+          "messages"
         ],
         "title": "ConversationRestoreResponse",
         "description": "Response containing conversation history."
+      },
+      "CreateChatRequest": {
+        "properties": {
+          "loop_id": {
+            "type": "string",
+            "title": "Loop Id",
+            "description": "ID of the loop to add the chat message to"
+          },
+          "msg": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Msg",
+            "description": "User message content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loop_id",
+          "msg"
+        ],
+        "title": "CreateChatRequest",
+        "description": "Request model for creating a new chat message."
+      },
+      "CreateLoopRequest": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id",
+            "description": "ID of the parent track"
+          },
+          "measures": {
+            "type": "integer",
+            "maximum": 32.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Measures",
+            "description": "Number of measures in the loop (1-32)"
+          },
+          "repeat": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Repeat",
+            "description": "Number of times to repeat the loop (default: 1)",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "track_id",
+          "measures"
+        ],
+        "title": "CreateLoopRequest",
+        "description": "Request model for creating a new loop."
       },
       "CreateSongRequest": {
         "properties": {
@@ -781,17 +911,75 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "LoopResponse": {
+      "LoopDetailResponse": {
         "properties": {
           "id": {
             "type": "string",
             "title": "Id",
             "description": "Loop ID"
           },
-          "title": {
+          "measures": {
+            "type": "integer",
+            "title": "Measures",
+            "description": "Number of measures in the loop"
+          },
+          "repeat": {
+            "type": "integer",
+            "title": "Repeat",
+            "description": "Number of times to repeat the loop"
+          },
+          "midi_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Midi Events",
+            "description": "MIDI events in the loop"
+          },
+          "track_id": {
             "type": "string",
-            "title": "Title",
-            "description": "Loop title"
+            "title": "Track Id",
+            "description": "ID of the parent track"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          },
+          "chats": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageResponse"
+            },
+            "type": "array",
+            "title": "Chats",
+            "description": "Chat messages in chronological order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "measures",
+          "repeat",
+          "midi_events",
+          "track_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LoopDetailResponse",
+        "description": "Response model for MIDI loops, including chat message history."
+      },
+      "LoopResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Loop ID"
           },
           "measures": {
             "type": "integer",
@@ -831,7 +1019,6 @@
         "type": "object",
         "required": [
           "id",
-          "title",
           "measures",
           "repeat",
           "midi_events",
@@ -840,7 +1027,7 @@
           "updated_at"
         ],
         "title": "LoopResponse",
-        "description": "Response model for MIDI loops."
+        "description": "Response model for MIDI loops, excluding chat message history."
       },
       "MidiEvent": {
         "properties": {
