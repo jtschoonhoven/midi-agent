@@ -66,35 +66,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/midi/render": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Render Midi
-         * @description Render MIDI events to audio.
-         *
-         *     Args:
-         *         request: Render request with BPM and MIDI events
-         *
-         *     Returns:
-         *         RenderResponse with audio URL, duration, and sample rate
-         *
-         *     Raises:
-         *         HTTPException: If rendering fails
-         */
-        post: operations["render_midi_api_midi_render_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/midi/songs/": {
         parameters: {
             query?: never;
@@ -128,7 +99,7 @@ export interface paths {
          *         user_id: User ID from Authorization header
          *
          *     Returns:
-         *         SongResponse with the new song and its empty track
+         *         SongDetailResponse with the new song and its empty track
          *
          *     Raises:
          *         HTTPException: If creation fails
@@ -157,7 +128,7 @@ export interface paths {
          *         user_id: User ID from Authorization header
          *
          *     Returns:
-         *         SongResponse with tracks and loops
+         *         SongDetailResponse with tracks and loops
          *
          *     Raises:
          *         HTTPException: If song not found or access denied
@@ -165,6 +136,35 @@ export interface paths {
         get: operations["get_song_api_midi_songs__song_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render Midi
+         * @description Render MIDI events to audio.
+         *
+         *     Args:
+         *         request: Render request with BPM and MIDI events
+         *
+         *     Returns:
+         *         RenderResponse with audio URL, duration, and sample rate
+         *
+         *     Raises:
+         *         HTTPException: If rendering fails
+         */
+        post: operations["render_midi_api_midi_render_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -290,10 +290,10 @@ export interface components {
             updated_at: string;
         };
         /**
-         * ConversationMessage
+         * ConversationMessageResponse
          * @description A message in the conversation history.
          */
-        ConversationMessage: {
+        ConversationMessageResponse: {
             /**
              * Role
              * @description Message role: 'user' or 'assistant'
@@ -387,7 +387,7 @@ export interface components {
              * Messages
              * @description Conversation messages in chronological order
              */
-            messages: components["schemas"]["ConversationMessage"][];
+            messages: components["schemas"]["ConversationMessageResponse"][];
             /**
              * Message Count
              * @description Total number of messages
@@ -524,6 +524,11 @@ export interface components {
          */
         MidiEvent: {
             /**
+             * Chord
+             * @description Underlying chord in the progression (does not necessarily match the current note)
+             */
+            chord?: ("I" | "II" | "III" | "IV" | "V" | "VI" | "VII" | "V7" | "I7" | "IV7" | "VI7" | "IIdim" | "VIIdim" | "Vdim" | "Vsus4" | "Isus4" | "Vsus2") | null;
+            /**
              * Measure
              * @description The measure, starting from 1
              */
@@ -649,20 +654,15 @@ export interface components {
             sample_rate: number;
         };
         /**
-         * SongResponse
+         * SongDetailResponse
          * @description Response model for MIDI songs including tracks and loops.
          */
-        SongResponse: {
+        SongDetailResponse: {
             /**
              * Id
              * @description Song ID
              */
             id: string;
-            /**
-             * User Id
-             * @description User ID who owns the song
-             */
-            user_id: string;
             /**
              * Title
              * @description Song title
@@ -679,10 +679,46 @@ export interface components {
              */
             key: string;
             /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
              * Tracks
              * @description Tracks in this song
              */
             tracks?: components["schemas"]["TrackResponse"][];
+        };
+        /**
+         * SongResponse
+         * @description Response model for MIDI songs including tracks and loops.
+         */
+        SongResponse: {
+            /**
+             * Id
+             * @description Song ID
+             */
+            id: string;
+            /**
+             * Title
+             * @description Song title
+             */
+            title: string;
+            /**
+             * Bpm
+             * @description Tempo in BPM
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             */
+            key: string;
             /**
              * Created At
              * @description ISO timestamp of creation
@@ -814,39 +850,6 @@ export interface operations {
             };
         };
     };
-    render_midi_api_midi_render_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenderRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RenderResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_songs_api_midi_songs__get: {
         parameters: {
             query?: never;
@@ -886,7 +889,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SongResponse"];
+                    "application/json": components["schemas"]["SongDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -917,7 +920,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SongResponse"];
+                    "application/json": components["schemas"]["SongDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    render_midi_api_midi_render_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderResponse"];
                 };
             };
             /** @description Validation Error */

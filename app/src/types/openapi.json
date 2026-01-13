@@ -90,10 +90,119 @@
         }
       }
     },
-    "/api/midi/render": {
+    "/api/midi/songs/": {
+      "get": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "List Songs",
+        "description": "List all songs for the current user.\n\nArgs:\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    List of SongResponse objects\n\nRaises:\n    HTTPException: If retrieval fails",
+        "operationId": "list_songs_api_midi_songs__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SongResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Songs Api Midi Songs  Get"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "midi"
+        ],
+        "summary": "Create Song",
+        "description": "Create a new song with an empty track.\n\nArgs:\n    request: Song creation request with title, bpm, and key\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongDetailResponse with the new song and its empty track\n\nRaises:\n    HTTPException: If creation fails",
+        "operationId": "create_song_api_midi_songs__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSongRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/songs/{song_id}": {
+      "get": {
+        "tags": [
+          "midi"
+        ],
+        "summary": "Get Song",
+        "description": "Get a specific song with all track details and loops.\n\nArgs:\n    song_id: Song identifier (path parameter)\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongDetailResponse with tracks and loops\n\nRaises:\n    HTTPException: If song not found or access denied",
+        "operationId": "get_song_api_midi_songs__song_id__get",
+        "parameters": [
+          {
+            "name": "song_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Song Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/render": {
+      "post": {
+        "tags": [
+          "audio"
         ],
         "summary": "Render Midi",
         "description": "Render MIDI events to audio.\n\nArgs:\n    request: Render request with BPM and MIDI events\n\nReturns:\n    RenderResponse with audio URL, duration, and sample rate\n\nRaises:\n    HTTPException: If rendering fails",
@@ -132,119 +241,10 @@
         }
       }
     },
-    "/api/midi/songs/": {
-      "get": {
-        "tags": [
-          "midi"
-        ],
-        "summary": "List Songs",
-        "description": "List all songs for the current user.\n\nArgs:\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    List of SongResponse objects\n\nRaises:\n    HTTPException: If retrieval fails",
-        "operationId": "list_songs_api_midi_songs__get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/SongResponse"
-                  },
-                  "type": "array",
-                  "title": "Response List Songs Api Midi Songs  Get"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "midi"
-        ],
-        "summary": "Create Song",
-        "description": "Create a new song with an empty track.\n\nArgs:\n    request: Song creation request with title, bpm, and key\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongResponse with the new song and its empty track\n\nRaises:\n    HTTPException: If creation fails",
-        "operationId": "create_song_api_midi_songs__post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSongRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SongResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/midi/songs/{song_id}": {
-      "get": {
-        "tags": [
-          "midi"
-        ],
-        "summary": "Get Song",
-        "description": "Get a specific song with all track details and loops.\n\nArgs:\n    song_id: Song identifier (path parameter)\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongResponse with tracks and loops\n\nRaises:\n    HTTPException: If song not found or access denied",
-        "operationId": "get_song_api_midi_songs__song_id__get",
-        "parameters": [
-          {
-            "name": "song_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Song Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SongResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/midi/loops/{loop_id}/chats": {
       "get": {
         "tags": [
-          "midi"
+          "chats"
         ],
         "summary": "Get Loop Chats",
         "description": "Get complete chat history for a specific loop.\n\nArgs:\n    loop_id: Loop identifier (path parameter)\n    db: Database session\n\nReturns:\n    ChatHistoryResponse with all messages\n\nRaises:\n    HTTPException: If loop not found",
@@ -401,7 +401,7 @@
         "title": "ChatMessageResponse",
         "description": "Response model for chat messages."
       },
-      "ConversationMessage": {
+      "ConversationMessageResponse": {
         "properties": {
           "role": {
             "type": "string",
@@ -526,7 +526,7 @@
           "content",
           "created_at"
         ],
-        "title": "ConversationMessage",
+        "title": "ConversationMessageResponse",
         "description": "A message in the conversation history."
       },
       "ConversationRestoreRequest": {
@@ -561,7 +561,7 @@
           },
           "messages": {
             "items": {
-              "$ref": "#/components/schemas/ConversationMessage"
+              "$ref": "#/components/schemas/ConversationMessageResponse"
             },
             "type": "array",
             "title": "Messages",
@@ -844,6 +844,37 @@
       },
       "MidiEvent": {
         "properties": {
+          "chord": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "I",
+                  "II",
+                  "III",
+                  "IV",
+                  "V",
+                  "VI",
+                  "VII",
+                  "V7",
+                  "I7",
+                  "IV7",
+                  "VI7",
+                  "IIdim",
+                  "VIIdim",
+                  "Vdim",
+                  "Vsus4",
+                  "Isus4",
+                  "Vsus2"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chord",
+            "description": "Underlying chord in the progression (does not necessarily match the current note)"
+          },
           "measure": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
@@ -1245,17 +1276,12 @@
         "title": "RenderResponse",
         "description": "Response from /api/midi/render endpoint with audio information."
       },
-      "SongResponse": {
+      "SongDetailResponse": {
         "properties": {
           "id": {
             "type": "string",
             "title": "Id",
             "description": "Song ID"
-          },
-          "user_id": {
-            "type": "string",
-            "title": "User Id",
-            "description": "User ID who owns the song"
           },
           "title": {
             "type": "string",
@@ -1272,6 +1298,16 @@
             "title": "Key",
             "description": "Musical key"
           },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          },
           "tracks": {
             "items": {
               "$ref": "#/components/schemas/TrackResponse"
@@ -1279,6 +1315,41 @@
             "type": "array",
             "title": "Tracks",
             "description": "Tracks in this song"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "bpm",
+          "key",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SongDetailResponse",
+        "description": "Response model for MIDI songs including tracks and loops."
+      },
+      "SongResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Song ID"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Song title"
+          },
+          "bpm": {
+            "type": "integer",
+            "title": "Bpm",
+            "description": "Tempo in BPM"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Musical key"
           },
           "created_at": {
             "type": "string",
@@ -1294,7 +1365,6 @@
         "type": "object",
         "required": [
           "id",
-          "user_id",
           "title",
           "bpm",
           "key",

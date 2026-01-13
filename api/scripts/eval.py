@@ -9,8 +9,11 @@ import pydantic
 import wandb
 import weave
 
-from api.midi.midi_routes import GenerateRequest, Key, ModelName, TimeSignature
-from api.midi.midi_utils import MidiEvent, PlanResponse, run_generation_pipeline
+from api.audio.audio_types import MidiEvent
+from api.chats.chat_types import ModelName
+from api.songs.song_types import Key, TimeSignature
+from api.songs.song_utils import PlanResponse, run_generation_pipeline
+from api.songs.song_routes import GenerateRequest
 
 # ==========================================================================
 # Evaluation dataset schema

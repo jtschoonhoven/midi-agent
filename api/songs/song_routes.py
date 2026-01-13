@@ -11,20 +11,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
+from api.audio.audio_types import MidiEvent
 from api.auth import get_current_user_id
 from api.database import get_db
-from api.midi.midi_constants import ADJECTIVES, NOUNS
-from api.midi.midi_models import (
-    ChatMessage,
-    MidiLoop,
-    MidiSong,
-    MidiTrack,
+from api.songs.song_constants import ADJECTIVES, NOUNS
+from api.songs.song_models import MidiSong
+from api.tracks.track_models import MidiTrack
+from api.loops.loop_models import MidiLoop
+from api.chats.chat_models import (
+    ConversationMessage,
     get_conversation_history,
     store_assistant_message,
     store_user_message,
 )
-from api.midi.midi_renderer import render_midi_to_audio
-from api.midi.midi_utils import MidiEvent, PlanResponse, run_generation_pipeline
+from api.songs.song_utils import PlanResponse, run_generation_pipeline
 
 # Type aliases
 Key = Literal["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
@@ -67,7 +67,7 @@ class ConversationRestoreRequest(pydantic.BaseModel):
     thread_id: UUID = pydantic.Field(description="Thread identifier to restore")
 
 
-class ConversationMessage(pydantic.BaseModel):
+class ConversationMessageResponse(pydantic.BaseModel):
     """A message in the conversation history."""
 
     role: str = pydantic.Field(description="Message role: 'user' or 'assistant'")
@@ -88,7 +88,7 @@ class ConversationRestoreResponse(pydantic.BaseModel):
 
     user_id: UUID = pydantic.Field(description="User identifier")
     thread_id: UUID = pydantic.Field(description="Thread identifier")
-    messages: list[ConversationMessage] = pydantic.Field(description="Conversation messages in chronological order")
+    messages: list[ConversationMessageResponse] = pydantic.Field(description="Conversation messages in chronological order")
     message_count: int = pydantic.Field(description="Total number of messages")
 
 
@@ -154,13 +154,19 @@ class SongResponse(pydantic.BaseModel):
     """Response model for MIDI songs including tracks and loops."""
 
     id: str = pydantic.Field(description="Song ID")
-    user_id: str = pydantic.Field(description="User ID who owns the song")
     title: str = pydantic.Field(description="Song title")
     bpm: int = pydantic.Field(description="Tempo in BPM")
     key: str = pydantic.Field(description="Musical key")
-    tracks: list[TrackResponse] = pydantic.Field(default_factory=list, description="Tracks in this song")
     created_at: str = pydantic.Field(description="ISO timestamp of creation")
     updated_at: str = pydantic.Field(description="ISO timestamp of last update")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SongDetailResponse(SongResponse):
+    """Response model for MIDI songs including tracks and loops."""
+
+    tracks: list[TrackResponse] = pydantic.Field(default_factory=list, description="Tracks in this song")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -179,6 +185,8 @@ class ChatHistoryResponse(pydantic.BaseModel):
     loop_id: str = pydantic.Field(description="Loop ID")
     messages: list[ChatMessageResponse] = pydantic.Field(description="Chat messages in chronological order")
     message_count: int = pydantic.Field(description="Total number of messages")
+
+
 
 
 router = APIRouter(prefix="/api/midi", tags=["midi"])
@@ -288,7 +296,7 @@ async def restore_conversation(
 
         # Convert to response format
         conversation_messages = [
-            ConversationMessage(
+            ConversationMessageResponse(
                 role=msg.role,
                 content=msg.content,
                 plan_model=msg.plan_model,
@@ -316,55 +324,12 @@ async def restore_conversation(
         raise HTTPException(status_code=500, detail=f"Conversation restoration failed: {str(e)}")
 
 
-@router.post("/render", response_model=RenderResponse)
-async def render_midi(request: RenderRequest) -> RenderResponse:
-    """
-    Render MIDI events to audio.
-
-    Args:
-        request: Render request with BPM and MIDI events
-
-    Returns:
-        RenderResponse with audio URL, duration, and sample rate
-
-    Raises:
-        HTTPException: If rendering fails
-    """
-    try:
-        # Render MIDI to audio
-        sample_rate = 44100
-        audio_file_path, duration, actual_sample_rate = render_midi_to_audio(request.midi, request.bpm, sample_rate)
-
-        # Store audio file in a persistent location
-        # Create output directory if it doesn't exist
-        project_root = Path(__file__).parent.parent.parent
-        output_dir = project_root / "audio_output"
-        output_dir.mkdir(exist_ok=True)
-
-        # Generate unique filename
-        output_filename = f"{uuid4()}.wav"
-        output_path = output_dir / output_filename
-
-        # Move rendered file to output directory
-        shutil.move(audio_file_path, str(output_path))
-
-        # Generate URL (for local development, use file path)
-        # In production, this would be a proper URL to a CDN or file server
-        audio_url = f"/audio/{output_filename}"
-
-        return RenderResponse(audio_url=audio_url, duration_seconds=duration, sample_rate=actual_sample_rate)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=500, detail=f"Soundfont not found: {str(e)}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MIDI rendering failed: {str(e)}")
-
-
-@router.post("/songs/", response_model=SongResponse)
+@router.post("/songs/", response_model=SongDetailResponse)
 async def create_song(
     request: CreateSongRequest,
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
-) -> SongResponse:
+) -> SongDetailResponse:
     """
     Create a new song with an empty track.
 
@@ -374,7 +339,7 @@ async def create_song(
         user_id: User ID from Authorization header
 
     Returns:
-        SongResponse with the new song and its empty track
+        SongDetailResponse with the new song and its empty track
 
     Raises:
         HTTPException: If creation fails
@@ -417,9 +382,8 @@ async def create_song(
             updated_at=track.updated_at.isoformat(),
         )
 
-        return SongResponse(
+        return SongDetailResponse(
             id=song.id,
-            user_id=song.user_id,
             title=song.title,
             bpm=song.bpm,
             key=song.key,
@@ -451,7 +415,6 @@ async def list_songs(
         HTTPException: If retrieval fails
     """
     try:
-        # Fetch songs with eager loading of tracks and loops
         songs = (
             db.query(MidiSong)
             .filter(MidiSong.user_id == str(user_id))
@@ -459,59 +422,27 @@ async def list_songs(
             .all()
         )
 
-        result = []
-        for song in songs:
-            # Build track responses with loops
-            track_responses = []
-            for track in song.tracks:
-                loop_responses = [
-                    LoopResponse(
-                        id=loop.id,
-                        title=loop.title,
-                        measures=loop.measures,
-                        repeat=loop.repeat,
-                        midi_events=loop.midi_events,
-                        track_id=loop.track_id,
-                        created_at=loop.created_at.isoformat(),
-                        updated_at=loop.updated_at.isoformat(),
-                    )
-                    for loop in track.loops
-                ]
-                track_responses.append(
-                    TrackResponse(
-                        id=track.id,
-                        song_id=track.song_id,
-                        midi_channel=track.midi_channel,
-                        loops=loop_responses,
-                        created_at=track.created_at.isoformat(),
-                        updated_at=track.updated_at.isoformat(),
-                    )
-                )
-
-            result.append(
-                SongResponse(
-                    id=song.id,
-                    user_id=song.user_id,
-                    title=song.title,
-                    bpm=song.bpm,
-                    key=song.key,
-                    tracks=track_responses,
-                    created_at=song.created_at.isoformat(),
-                    updated_at=song.updated_at.isoformat(),
-                )
+        return [
+            SongResponse(
+                id=song.id,
+                title=song.title,
+                bpm=song.bpm,
+                key=song.key,
+                created_at=song.created_at.isoformat(),
+                updated_at=song.updated_at.isoformat(),
             )
-
-        return result
+            for song in songs
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve songs: {str(e)}")
 
 
-@router.get("/songs/{song_id}", response_model=SongResponse)
+@router.get("/songs/{song_id}", response_model=SongDetailResponse)
 async def get_song(
     song_id: str,
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
-) -> SongResponse:
+) -> SongDetailResponse:
     """
     Get a specific song with all track details and loops.
 
@@ -521,7 +452,7 @@ async def get_song(
         user_id: User ID from Authorization header
 
     Returns:
-        SongResponse with tracks and loops
+        SongDetailResponse with tracks and loops
 
     Raises:
         HTTPException: If song not found or access denied
@@ -557,9 +488,8 @@ async def get_song(
             for track in song.tracks
         ]
 
-        return SongResponse(
+        return SongDetailResponse(
             id=song.id,
-            user_id=song.user_id,
             title=song.title,
             bpm=song.bpm,
             key=song.key,
@@ -573,47 +503,3 @@ async def get_song(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve song: {str(e)}")
 
 
-@router.get("/loops/{loop_id}/chats", response_model=ChatHistoryResponse)
-async def get_loop_chats(loop_id: str, db: Session = Depends(get_db)) -> ChatHistoryResponse:
-    """
-    Get complete chat history for a specific loop.
-
-    Args:
-        loop_id: Loop identifier (path parameter)
-        db: Database session
-
-    Returns:
-        ChatHistoryResponse with all messages
-
-    Raises:
-        HTTPException: If loop not found
-    """
-    try:
-        # Verify loop exists
-        loop = db.query(MidiLoop).filter(MidiLoop.id == loop_id).first()
-        if not loop:
-            raise HTTPException(status_code=404, detail="Loop not found")
-
-        # Get all chat messages for this loop
-        messages = (
-            db.query(ChatMessage).filter(ChatMessage.loop_id == loop_id).order_by(ChatMessage.created_at.asc()).all()
-        )
-
-        message_responses = [
-            ChatMessageResponse(
-                id=msg.id,
-                role=msg.role,
-                msg=msg.msg,
-                midi_events=msg.midi_events,
-                loop_id=msg.loop_id,
-                created_at=msg.created_at.isoformat(),
-                updated_at=msg.updated_at.isoformat(),
-            )
-            for msg in messages
-        ]
-
-        return ChatHistoryResponse(loop_id=loop_id, messages=message_responses, message_count=len(message_responses))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve chat history: {str(e)}")

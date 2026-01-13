@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import os
 import shutil
 from pathlib import Path
 
@@ -7,12 +8,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import weave
 
 from api.database import init_db
-from api.midi.midi_routes import router as midi_router
+from api.songs.song_routes import router as song_router
+from api.audio.audio_routes import router as audio_router
+from api.chats.chat_routes import router as chat_router
 
-# Load environment variables from .env file
-load_dotenv()
 
 app = FastAPI(
     title="MIDI Agent API",
@@ -24,6 +26,9 @@ app = FastAPI(
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event():
+    load_dotenv()
+    weave.init(os.environ["PROJECT_ID"])
+
     # Check if FluidSynth is installed
     fluidsynth_path = shutil.which("fluidsynth")
     if not fluidsynth_path:
@@ -57,7 +62,9 @@ app.add_middleware(
 )
 
 # Register routers
-app.include_router(midi_router)
+app.include_router(song_router)
+app.include_router(audio_router)
+app.include_router(chat_router)
 
 
 @app.get("/health")

@@ -10,10 +10,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from api.audio.audio_types import MidiEvent
 from api.database import Base, get_db
 from api.main import app
-from api.midi.midi_models import ChatMessage, MidiLoop, MidiSong, MidiTrack
-from api.midi.midi_utils import MidiEvent
+from api.songs.song_models import MidiSong
+from api.tracks.track_models import MidiTrack
+from api.loops.loop_models import MidiLoop
+from api.chats.chat_models import ChatMessage
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -92,8 +95,8 @@ def render_request_payload(sample_midi_events):
 class TestRenderEndpoint:
     """Tests for /api/midi/render endpoint."""
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
-    @patch("api.midi.midi_routes.shutil.move")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
+    @patch("api.audio.audio_routes.shutil.move")
     def test_render_midi_success(self, mock_move, mock_render, client, render_request_payload):
         """Test successful MIDI rendering."""
         # Create a temporary file to simulate rendered audio
@@ -139,7 +142,7 @@ class TestRenderEndpoint:
             # Clean up temp file if it still exists
             Path(temp_file_path).unlink(missing_ok=True)
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
     def test_render_midi_invalid_bpm(self, mock_render, client):
         """Test render with invalid BPM."""
         payload = {
@@ -150,7 +153,7 @@ class TestRenderEndpoint:
         response = client.post("/api/midi/render", json=payload)
         assert response.status_code == 422  # Validation error
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
     def test_render_midi_empty_events(self, mock_render, client):
         """Test render with empty MIDI events."""
         payload = {"bpm": 120, "midi": []}
@@ -159,7 +162,7 @@ class TestRenderEndpoint:
         # The actual behavior depends on how render_midi_to_audio handles empty input
         client.post("/api/midi/render", json=payload)
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
     def test_render_midi_soundfont_not_found(self, mock_render, client, render_request_payload):
         """Test render when soundfont is not found."""
         # Mock the render function to raise FileNotFoundError
@@ -170,7 +173,7 @@ class TestRenderEndpoint:
         assert response.status_code == 500
         assert "Soundfont not found" in response.json()["detail"]
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
     def test_render_midi_generic_error(self, mock_render, client, render_request_payload):
         """Test render with generic error during rendering."""
         # Mock the render function to raise a generic exception
@@ -181,8 +184,8 @@ class TestRenderEndpoint:
         assert response.status_code == 500
         assert "MIDI rendering failed" in response.json()["detail"]
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
-    @patch("api.midi.midi_routes.shutil.move")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
+    @patch("api.audio.audio_routes.shutil.move")
     def test_render_midi_high_bpm(self, mock_move, mock_render, client):
         """Test render with high BPM value."""
         temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -206,8 +209,8 @@ class TestRenderEndpoint:
         finally:
             Path(temp_file_path).unlink(missing_ok=True)
 
-    @patch("api.midi.midi_routes.render_midi_to_audio")
-    @patch("api.midi.midi_routes.shutil.move")
+    @patch("api.audio.audio_utils.render_midi_to_audio")
+    @patch("api.audio.audio_routes.shutil.move")
     def test_render_midi_control_messages(self, mock_move, mock_render, client):
         """Test render with control messages (Sustain, ModWheel, etc.)."""
         temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)

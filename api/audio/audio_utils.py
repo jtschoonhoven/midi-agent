@@ -9,7 +9,7 @@ import fluidsynth
 import mido
 from mido import Message, MidiFile, MidiTrack
 
-from api.midi.midi_utils import MidiEvent
+from api.audio.audio_types import MidiEvent
 
 
 def get_soundfont_path() -> str:
