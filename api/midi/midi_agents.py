@@ -6,7 +6,7 @@ Docs: https://docs.wandb.ai/weave/guides/core-types/models
 
 import logging
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID, uuid4
 
 import pydantic
@@ -18,13 +18,20 @@ from sqlalchemy.orm import Session, joinedload
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
-from api.chats.chat_models import ChatMessage
+from api.chats import chat_models
 from api.database import SessionLocal
-from api.loops.loop_models import MidiLoop
-from api.songs.song_models import MidiSong
-from api.tracks.track_models import MidiTrack
+from api.loops import loop_models
+from api.midi import midi_evals
+from api.songs import song_models
+from api.tracks import track_models
+
+if TYPE_CHECKING:
+    from api.chats.chat_models import ModelName
+    from api.loops.loop_models import MidiLoop
 
 log = logging.getLogger(__name__)
+
+ChatHistory = list[SystemMessage | HumanMessage | AIMessage]
 
 PLANNING_PROMPT = """You are a music theory expert and composition planner.
 
@@ -72,13 +79,37 @@ staccato eighth notes and a playful rhythm" or "Warm sustained pad chords creati
 
 _CLIENT: Optional["_GenerateMidi"] = None
 
+DEFAULT_MODEL_NAME = "gpt-5-nano"
+
 
 def get_agent() -> "_GenerateMidi":
     """Get a client for the GenerateMidi model."""
     global _CLIENT
     if _CLIENT is None:
-        _CLIENT = _GenerateMidi(model_name="gpt-4o", system_prompt=GENERATION_PROMPT)
+        _CLIENT = _GenerateMidi(model_name=DEFAULT_MODEL_NAME, system_prompt=GENERATION_PROMPT)
     return _CLIENT
+
+
+@weave.op()
+async def generate_midi(model_name: "ModelName", expect_measures: int, chat_history: ChatHistory) -> "GenerateMidiResponse":
+    """
+    Run inference to generate MIDI events using the given model and chat history.
+    Injects a constraint to restrict the number of measures generated.
+    """
+    if not chat_history:
+        log.error("No chat history provided")
+        raise HTTPException(status_code=500)
+
+    # Inject a constraint for the number of measures
+    user_msg = chat_history[-1].content
+    chat_history[-1].content = f"{user_msg}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
+
+    model = init_chat_model(
+        model_name,
+        model_provider=MODEL_PROVIDER_MAP[model_name],
+    ).with_structured_output(GenerateMidiResponse)
+
+    return model.ainvoke(chat_history)
 
 
 class _GenerateMidi(weave.Model):
@@ -93,7 +124,7 @@ class _GenerateMidi(weave.Model):
     system_prompt: str
 
     @weave.op()
-    async def invoke(self, *, user_id: UUID, track_id: UUID, loop_id: UUID, user_prompt: str) -> MidiLoop:
+    async def invoke(self, *, user_id: UUID, track_id: UUID, loop_id: UUID, user_prompt: str, expect_measures: int) -> "MidiLoop":
         """Generate MIDI events from a user prompt and save to database.
 
         Returns:
@@ -111,18 +142,17 @@ class _GenerateMidi(weave.Model):
         if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
 
-        # Initialize model with structured output
-        model = init_chat_model(self.model_name, model_provider=model_provider).with_structured_output(
-            GenerateMidiResponse
-        )
-
         # Get the chat history and add the current prompt
-        messages = self.load_chat_history(user_id=user_id, track_id=track_id, loop_id=loop_id)
-        messages.append(HumanMessage(content=user_prompt))
+        chat_history = self.load_chat_history(user_id=user_id, track_id=track_id, loop_id=loop_id, system_prompt=GENERATION_PROMPT)
+        chat_history.append(HumanMessage(content=user_prompt))
 
         # Invoke model with structured output
-        response: GenerateMidiResponse = await model.ainvoke(messages)
-        midi_events = response.to_midi_events()
+        response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
+        midi_events: list[MidiEvent] = response.to_midi_events()
+
+        # Evaluate the response
+        score = await call.apply_scorer(midi_evals.evaluate_num_measures)
+        log.info(f"Score: {score}")
 
         # Save to database: create new loop and chat messages
         loop = self.update_loop(
@@ -135,35 +165,27 @@ class _GenerateMidi(weave.Model):
         )
         return loop
 
+    @staticmethod
     def load_chat_history(
-        self, *, user_id: UUID, track_id: UUID, loop_id: UUID
+        *, user_id: UUID, track_id: UUID, loop_id: UUID, system_prompt: str
     ) -> list[SystemMessage | HumanMessage | AIMessage]:
-        """Load chat history from a specific loop or the most recent loop in a track.
-
-        Args:
-            user_id: User ID
-            track_id: Track ID
-            loop_id: Loop ID to load chat history from, or None for a new loop
-
-        Returns:
-            List of LangChain message objects (SystemMessage, HumanMessage, AIMessage)
-        """
+        """Load chat history from a specific loop or the most recent loop in a track."""
         db: Session = SessionLocal()
 
         try:
             loop = (
-                db.query(MidiLoop)
-                .join(MidiTrack, MidiLoop.track_id == MidiTrack.id)
-                .join(MidiSong, MidiTrack.song_id == MidiSong.id)
-                .options(joinedload(MidiLoop.chat_messages))
-                .filter(MidiLoop.id == str(loop_id), MidiTrack.id == str(track_id), MidiSong.user_id == str(user_id))
+                db.query(loop_models.MidiLoop)
+                .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
+                .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
+                .options(joinedload(loop_models.MidiLoop.chat_messages))
+                .filter(loop_models.MidiLoop.id == str(loop_id), track_models.MidiTrack.id == str(track_id), song_models.MidiSong.user_id == str(user_id))
                 .first()
             )
             if not loop:
                 raise HTTPException(status_code=404)
 
             # Initialize history with the system prompt
-            history: list[SystemMessage | HumanMessage | AIMessage] = [SystemMessage(content=self.system_prompt)]
+            history: list[SystemMessage | HumanMessage | AIMessage] = [SystemMessage(content=system_prompt)]
 
             # Convert database messages to LangChain messages
             for chat in sorted(loop.chat_messages, key=lambda x: x.created_at):
@@ -191,17 +213,18 @@ class _GenerateMidi(weave.Model):
         user_prompt: str,
         agent_description: str,
         midi_events: list[MidiEvent],
-    ) -> MidiLoop:
+    ) -> "MidiLoop":
         """Save generated MIDI to database as a new loop with chat messages."""
         db: Session = SessionLocal()
 
         try:
             # Fetch the loop and verify track exists and belongs to user (assumed to exist)
             loop = (
-                db.query(MidiLoop)
-                .join(MidiTrack, MidiLoop.track_id == MidiTrack.id)
-                .join(MidiSong, MidiTrack.song_id == MidiSong.id)
-                .filter(MidiLoop.id == str(loop_id), MidiTrack.id == str(track_id), MidiSong.user_id == str(user_id))
+                db.query(loop_models.MidiLoop)
+                .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
+                .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
+                .options(joinedload(loop_models.MidiLoop.chat_messages))
+                .filter(loop_models.MidiLoop.id == str(loop_id), track_models.MidiTrack.id == str(track_id), song_models.MidiSong.user_id == str(user_id))
                 .first()
             )
 
@@ -214,7 +237,7 @@ class _GenerateMidi(weave.Model):
             db.add(loop)
 
             # Add the user prompt to the chat history
-            message = ChatMessage(
+            message = chat_models.ChatMessage(
                 id=str(uuid4()),
                 role="user",
                 msg=user_prompt,
@@ -224,7 +247,7 @@ class _GenerateMidi(weave.Model):
             db.add(message)
 
             # Add the assistant message to the chat history
-            assistant_message = ChatMessage(
+            assistant_message = chat_models.ChatMessage(
                 id=str(uuid4()),
                 role="assistant",
                 msg=agent_description,  # Use LLM-generated description
@@ -233,8 +256,12 @@ class _GenerateMidi(weave.Model):
             )
             db.add(assistant_message)
 
-            # Commit changes and return
+            # Commit changes
             db.commit()
+
+            # Refresh to eagerly load all relationships before closing session
+            db.refresh(loop)
+
             return loop
 
         except Exception as e:
@@ -355,27 +382,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate MIDI events using LLM with chat history")
     parser.add_argument(
         "--user-id",
-        type=str,
-        required=True,
-        help="User ID (UUID format)",
+        default="00000000-0000-0000-0000-000000000000",
+        help="User ID (UUID)",
     )
     parser.add_argument(
         "--track-id",
-        type=str,
-        required=True,
-        help="Track ID (UUID format)",
+        default="00000000-0000-0000-0000-000000000000",
+        help="Track ID (UUID)",
     )
     parser.add_argument(
         "--loop-id",
-        type=str,
-        required=False,
-        help="Optional loop ID to continue from. If not provided, uses most recent loop in track.",
+        default="00000000-0000-0000-0000-000000000000",
+        help="Loop ID (UUID)",
     )
     parser.add_argument(
         "--prompt",
         type=str,
         required=True,
         help="User prompt for MIDI generation",
+    )
+    parser.add_argument(
+        "--measures",
+        type=int,
+        default=4,
+        help="Number of measures to generate",
     )
     parser.add_argument(
         "--model",
@@ -401,7 +431,13 @@ if __name__ == "__main__":
     # Run async invoke
     async def main():
         try:
-            midi_events, new_loop_id = await model.invoke(user_id, track_id, args.prompt, loop_id)
+            midi_events, new_loop_id = await model.invoke(
+                user_id=user_id,
+                track_id=track_id,
+                loop_id=loop_id,
+                user_prompt=args.prompt,
+                expect_measures=args.measures,
+            )
             # Print results as JSON
             result = {"loop_id": new_loop_id, "midi_events": [event.model_dump() for event in midi_events]}
             print(json.dumps(result, indent=2))

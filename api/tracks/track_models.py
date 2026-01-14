@@ -12,6 +12,7 @@ from api.database import Base
 if TYPE_CHECKING:
     from api.loops.loop_models import MidiLoop
     from api.songs.song_models import MidiSong
+    from api.songs.song_schemas import TrackResponse
 
 
 class MidiTrack(Base):
@@ -34,3 +35,16 @@ class MidiTrack(Base):
 
     def __repr__(self) -> str:
         return f"<MidiTrack(id={self.id}, song_id={self.song_id}, midi_channel={self.midi_channel})>"
+
+    def to_response(self) -> "TrackResponse":
+        # Import at runtime to avoid circular imports
+        from api.songs import song_schemas
+
+        return song_schemas.TrackResponse(
+            id=self.id,
+            song_id=self.song_id,
+            midi_channel=self.midi_channel,
+            loops=[loop.to_response() for loop in self.loops],
+            created_at=self.created_at.isoformat(),
+            updated_at=self.updated_at.isoformat(),
+        )

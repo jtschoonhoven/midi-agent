@@ -4,68 +4,6 @@
  */
 
 export interface paths {
-    "/api/midi/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Generate Midi
-         * @description Generate MIDI events from a natural language prompt.
-         *
-         *     Args:
-         *         request: Generation request with thread_id, constraints, and prompt
-         *         db: Database session
-         *         user_id: User ID from Authorization header
-         *
-         *     Returns:
-         *         MidiResponse with plan and list of MIDI events
-         *
-         *     Raises:
-         *         HTTPException: If generation fails
-         */
-        post: operations["generate_midi_api_midi_generate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/midi/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore Conversation
-         * @description Restore a previous conversation by thread_id.
-         *
-         *     Args:
-         *         request: Restore request with thread_id
-         *         db: Database session
-         *         user_id: User ID from Authorization header
-         *
-         *     Returns:
-         *         ConversationRestoreResponse with full conversation history
-         *
-         *     Raises:
-         *         HTTPException: If conversation not found or retrieval fails
-         */
-        post: operations["restore_conversation_api_midi_restore_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/midi/songs/": {
         parameters: {
             query?: never;
@@ -171,37 +109,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/midi/chats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Chat
-         * @description Create a new user chat message for a loop.
-         *
-         *     Args:
-         *         request: CreateChatRequest with loop_id and msg
-         *         db: Database session
-         *         user_id: User ID from Authorization header
-         *
-         *     Returns:
-         *         ChatMessageResponse with the newly created message
-         *
-         *     Raises:
-         *         HTTPException: If loop not found or access denied
-         */
-        post: operations["create_chat_api_midi_chats_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/midi/loops/": {
         parameters: {
             query?: never;
@@ -214,20 +121,35 @@ export interface paths {
         /**
          * Create Loop
          * @description Create a new MIDI loop.
-         *
-         *     Args:
-         *         request: CreateLoopRequest with track_id and measures
-         *         db: Database session
-         *         user_id: User ID from Authorization header
-         *
-         *     Returns:
-         *         LoopDetailResponse with the newly created loop
-         *
-         *     Raises:
-         *         HTTPException: If track not found or access denied
          */
         post: operations["create_loop_api_midi_loops__post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/loops/{loop_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Loop
+         * @description Get a specific loop with all chat messages.
+         */
+        get: operations["get_loop_api_midi_loops__loop_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Loop
+         * @description Delete a loop and all associated chat messages.
+         *
+         *     The chat messages are automatically deleted via cascade relationship.
+         */
+        delete: operations["delete_loop_api_midi_loops__loop_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -240,23 +162,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Chats
-         * @description Get complete chat history for a specific loop.
-         *
-         *     Args:
-         *         loop_id: Loop identifier (path parameter)
-         *         db: Database session
-         *
-         *     Returns:
-         *         ChatHistoryResponse with all messages
-         *
-         *     Raises:
-         *         HTTPException: If loop not found
-         */
-        get: operations["get_chats_api_midi_loops__loop_id__chats_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Append Chat
+         * @description Create a new user chat message for a loop.
+         */
+        post: operations["append_chat_api_midi_loops__loop_id__chats_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -288,25 +200,20 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * ChatHistoryResponse
-         * @description Response model for chat history.
+         * AppendChatRequest
+         * @description Request model for appending a new chat message to a loop.
          */
-        ChatHistoryResponse: {
+        AppendChatRequest: {
             /**
              * Loop Id
-             * @description Loop ID
+             * @description ID of the loop to add the chat message to
              */
             loop_id: string;
             /**
-             * Messages
-             * @description Chat messages in chronological order
+             * Msg
+             * @description User message content
              */
-            messages: components["schemas"]["ChatMessageResponse"][];
-            /**
-             * Message Count
-             * @description Total number of messages
-             */
-            message_count: number;
+            msg: string;
         };
         /**
          * ChatMessageResponse
@@ -352,122 +259,6 @@ export interface components {
             updated_at: string;
         };
         /**
-         * ConversationMessageResponse
-         * @description A message in the conversation history.
-         */
-        ConversationMessageResponse: {
-            /**
-             * Role
-             * @description Message role: 'user' or 'assistant'
-             */
-            role: string;
-            /**
-             * Content
-             * @description Message content
-             */
-            content: string;
-            /**
-             * Plan Model
-             * @description Model used for planning (user messages only)
-             */
-            plan_model?: string | null;
-            /**
-             * Generate Model
-             * @description Model used for generation (user messages only)
-             */
-            generate_model?: string | null;
-            /**
-             * Key
-             * @description Musical key constraint (user messages only)
-             */
-            key?: string | null;
-            /**
-             * Bpm
-             * @description BPM constraint (user messages only)
-             */
-            bpm?: number | null;
-            /**
-             * Time Signature
-             * @description Time signature constraint (user messages only)
-             */
-            time_signature?: string | null;
-            /**
-             * Measures
-             * @description Measures constraint (user messages only)
-             */
-            measures?: number | null;
-            /**
-             * Plan Data
-             * @description Plan data (assistant messages only)
-             */
-            plan_data?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Midi Events
-             * @description MIDI events (assistant messages only)
-             */
-            midi_events?: {
-                [key: string]: unknown;
-            }[] | null;
-            /**
-             * Created At
-             * @description ISO timestamp of message creation
-             */
-            created_at: string;
-        };
-        /**
-         * ConversationRestoreRequest
-         * @description Request to restore a conversation by thread_id.
-         */
-        ConversationRestoreRequest: {
-            /**
-             * Thread Id
-             * Format: uuid
-             * @description Thread identifier to restore
-             */
-            thread_id: string;
-        };
-        /**
-         * ConversationRestoreResponse
-         * @description Response containing conversation history.
-         */
-        ConversationRestoreResponse: {
-            /**
-             * User Id
-             * Format: uuid
-             * @description User identifier
-             */
-            user_id: string;
-            /**
-             * Thread Id
-             * Format: uuid
-             * @description Thread identifier
-             */
-            thread_id: string;
-            /**
-             * Messages
-             * @description Conversation messages in chronological order
-             */
-            messages: components["schemas"]["ConversationMessageResponse"][];
-        };
-        /**
-         * CreateChatRequest
-         * @description Request model for creating a new chat message.
-         */
-        CreateChatRequest: {
-            /**
-             * Loop Id
-             * @description ID of the loop to add the chat message to
-             */
-            loop_id: string;
-            /**
-             * Msg
-             * @description User message content
-             */
-            msg: string;
-        };
-        /**
          * CreateLoopRequest
          * @description Request model for creating a new loop.
          */
@@ -510,55 +301,6 @@ export interface components {
              * @enum {string}
              */
             key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#";
-        };
-        /**
-         * GenerateRequest
-         * @description Request payload for /api/midi/generate endpoint.
-         */
-        GenerateRequest: {
-            /**
-             * Thread Id
-             * Format: uuid
-             * @description Thread identifier for conversation context
-             */
-            thread_id: string;
-            /**
-             * Plan Model
-             * @description Model to use for the planning stage
-             * @enum {string}
-             */
-            plan_model: "claude-haiku-4-5" | "claude-sonnet-4-5" | "gpt-4o-mini" | "gpt-4o" | "gpt-5-2" | "gpt-5-mini" | "gpt-5-nano";
-            /**
-             * Generate Model
-             * @description Model to use for the generation stage
-             * @enum {string}
-             */
-            generate_model: "claude-haiku-4-5" | "claude-sonnet-4-5" | "gpt-4o-mini" | "gpt-4o" | "gpt-5-2" | "gpt-5-mini" | "gpt-5-nano";
-            /**
-             * Key
-             * @description Musical key constraint
-             */
-            key?: ("Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#") | null;
-            /**
-             * Bpm
-             * @description Tempo constraint in BPM (30-360)
-             */
-            bpm?: number | null;
-            /**
-             * Time Signature
-             * @description Time signature constraint
-             */
-            time_signature?: ("3/4" | "4/4" | "5/4" | "6/8" | "7/8") | null;
-            /**
-             * Measures
-             * @description Number of measures to generate (1-32)
-             */
-            measures?: number | null;
-            /**
-             * Prompt
-             * @description User's musical generation request
-             */
-            prompt: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -697,62 +439,6 @@ export interface components {
              * @description Velocity or CC value, scaled 0-100
              */
             value: number;
-        };
-        /**
-         * MidiResponse
-         * @description Response from /api/midi/generate endpoint including plan and MIDI.
-         */
-        MidiResponse: {
-            /** @description Musical plan from the planning stage */
-            plan: components["schemas"]["PlanResponse"];
-            /**
-             * Midi
-             * @description Generated MIDI events
-             */
-            midi: components["schemas"]["MidiEvent"][];
-        };
-        /**
-         * PlanResponse
-         * @description High-level musical plan from the planning stage.
-         */
-        PlanResponse: {
-            /**
-             * Key
-             * @description The musical key for the composition
-             * @enum {string}
-             */
-            key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#";
-            /**
-             * Bpm
-             * @description Tempo in beats-per-minute, 30-360
-             */
-            bpm: number;
-            /**
-             * Time Signature
-             * @description Time signature for the piece
-             * @enum {string}
-             */
-            time_signature: "3/4" | "4/4" | "5/4" | "6/8" | "7/8";
-            /**
-             * Measures
-             * @description Number of measures in the composition (1-32)
-             */
-            measures: number;
-            /**
-             * Style
-             * @description Brief description of the musical style/feel
-             */
-            style: string;
-            /**
-             * Chord Progression
-             * @description Chord progression using chord symbols (e.g. ['Gbm7', 'D', 'Em', 'C'])
-             */
-            chord_progression: string[];
-            /**
-             * Reasoning
-             * @description Explanation of musical choices for evaluation
-             */
-            reasoning: string;
         };
         /**
          * RenderRequest
@@ -922,72 +608,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    generate_midi_api_midi_generate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GenerateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MidiResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    restore_conversation_api_midi_restore_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConversationRestoreRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationRestoreResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_songs_api_midi_songs__get: {
         parameters: {
             query?: never;
@@ -1105,39 +725,6 @@ export interface operations {
             };
         };
     };
-    create_chat_api_midi_chats_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatMessageResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_loop_api_midi_loops__post: {
         parameters: {
             query?: never;
@@ -1171,7 +758,7 @@ export interface operations {
             };
         };
     };
-    get_chats_api_midi_loops__loop_id__chats_get: {
+    get_loop_api_midi_loops__loop_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1188,7 +775,73 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChatHistoryResponse"];
+                    "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_loop_api_midi_loops__loop_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    append_chat_api_midi_loops__loop_id__chats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopDetailResponse"];
                 };
             };
             /** @description Validation Error */

@@ -8,10 +8,11 @@ from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
-from api.loops import loop_routes
+from api.loops import loop_schemas
 
 if TYPE_CHECKING:
     from api.chats.chat_models import ChatMessage
+    from api.loops.loop_schemas import LoopDetailResponse, LoopResponse
     from api.tracks.track_models import MidiTrack
 
 
@@ -39,8 +40,8 @@ class MidiLoop(Base):
     def __repr__(self) -> str:
         return f"<MidiLoop(id={self.id}, measures={self.measures}, repeat={self.repeat})>"
 
-    def to_response(self) -> "loop_routes.LoopResponse":
-        return loop_routes.LoopResponse(
+    def to_response(self) -> "LoopResponse":
+        return loop_schemas.LoopResponse(
             id=self.id,
             measures=self.measures,
             repeat=self.repeat,
@@ -50,8 +51,8 @@ class MidiLoop(Base):
             updated_at=self.updated_at.isoformat(),
         )
 
-    def to_detail_response(self) -> "loop_routes.LoopDetailResponse":
-        return loop_routes.LoopDetailResponse(
+    def to_detail_response(self) -> "LoopDetailResponse":
+        return loop_schemas.LoopDetailResponse(
             id=self.id,
             measures=self.measures,
             repeat=self.repeat,
@@ -59,5 +60,5 @@ class MidiLoop(Base):
             track_id=self.track_id,
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
-            chats=self.chat_messages,
+            chats=[chat.to_response() for chat in self.chat_messages],
         )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from api.database import Base
 
 if TYPE_CHECKING:
+    from api.songs.song_schemas import SongDetailResponse, SongResponse
     from api.tracks.track_models import MidiTrack
 
 
@@ -54,3 +55,28 @@ class MidiSong(Base):
 
     def __repr__(self) -> str:
         return f"<MidiSong(id={self.id}, user_id={self.user_id}, title={self.title}, key={self.key}, bpm={self.bpm})>"
+    
+    def to_response(self) -> "SongResponse":
+        from api.songs import song_schemas
+
+        return song_schemas.SongResponse(
+            id=self.id,
+            title=self.title,
+            bpm=self.bpm,
+            key=self.key,
+            created_at=self.created_at.isoformat(),
+            updated_at=self.updated_at.isoformat(),
+        )
+
+    def to_detail_response(self) -> "SongDetailResponse":
+        from api.songs import song_schemas
+
+        return song_schemas.SongDetailResponse(
+            id=self.id,
+            title=self.title,
+            bpm=self.bpm,
+            key=self.key,
+            tracks=[track.to_response() for track in self.tracks],
+            created_at=self.created_at.isoformat(),
+            updated_at=self.updated_at.isoformat(),
+        )

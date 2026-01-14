@@ -8,10 +8,11 @@ from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
-from api.loops import loop_routes
+from api.loops import loop_schemas
 
 if TYPE_CHECKING:
     from api.loops.loop_models import MidiLoop
+    from api.loops.loop_schemas import ChatMessageResponse
 
 
 class ChatMessage(Base):
@@ -38,8 +39,8 @@ class ChatMessage(Base):
     def __repr__(self) -> str:
         return f"<ChatMessage(id={self.id}, role={self.role}, loop_id={self.loop_id})>"
 
-    def to_response(self) -> "loop_routes.ChatMessageResponse":
-        return loop_routes.ChatMessageResponse(
+    def to_response(self) -> "ChatMessageResponse":
+        return loop_schemas.ChatMessageResponse(
             id=self.id,
             role=self.role,
             msg=self.msg,
