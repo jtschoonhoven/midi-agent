@@ -28,11 +28,18 @@ import {
   TableHead,
   TableRow,
   Paper,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
-import { listSongs, createSong, getSong, createLoop, appendLoopChat, getLoop, deleteLoop, createTrack } from "../lib/api";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import PauseIcon from "@mui/icons-material/Pause";
+import { listSongs, createSong, getSong, createLoop, appendLoopChat, getLoop, deleteLoop, createTrack, deleteTrack, updateTrack } from "../lib/api";
+import { usePlayback } from "../contexts/PlaybackContext";
 import type { components } from "../types/api";
 
 type Song = components["schemas"]["SongResponse"];
@@ -43,6 +50,18 @@ type LoopDetail = components["schemas"]["LoopDetailResponse"];
 type ChatMessage = components["schemas"]["ChatMessageResponse"];
 
 export default function ChatInterface() {
+  const {
+    isPlaying,
+    bpm,
+    togglePlayPause,
+    setBpm: setPlaybackBpm,
+    loadSong,
+    midiOutputs,
+    selectedMidiOutput,
+    setSelectedMidiOutput,
+    requestMidiAccess,
+    hasMidiAccess,
+  } = usePlayback();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
@@ -67,6 +86,14 @@ export default function ChatInterface() {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [isDeletingLoop, setIsDeletingLoop] = useState(false);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
+
+  // Track modal state
+  const [showTrackModal, setShowTrackModal] = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [isDeletingTrack, setIsDeletingTrack] = useState(false);
+  const [editedTrackTitle, setEditedTrackTitle] = useState("");
+  const [editedTrackChannel, setEditedTrackChannel] = useState(1);
+  const [isUpdatingTrack, setIsUpdatingTrack] = useState(false);
 
   const toggleDrawer = (open: boolean) => () => {
     setDrawerOpen(open);
@@ -131,6 +158,29 @@ export default function ChatInterface() {
     loadSongDetail();
   }, [selectedSongId]);
 
+  // Load song data into playback context when song details change
+  useEffect(() => {
+    if (songDetail && songDetail.tracks) {
+      loadSong({
+        tracks: songDetail.tracks.map((track) => ({
+          id: track.id,
+          midi_channel: track.midi_channel,
+          loops: (track.loops || []).map((loop) => ({
+            id: loop.id,
+            measures: loop.measures,
+            repeat: loop.repeat,
+            midi_events: loop.midi_events as any, // API returns MidiEvent[] but typed as { [key: string]: unknown; }[]
+            track_id: loop.track_id,
+          })),
+        })),
+        bpm: songDetail.bpm,
+        time_signature: songDetail.time_signature,
+      });
+    } else {
+      loadSong(null);
+    }
+  }, [songDetail, loadSong]);
+
   // Create a new song
   const handleCreateSong = async () => {
     try {
@@ -138,6 +188,7 @@ export default function ChatInterface() {
       const result = await createSong({
         bpm: 120,
         key: "C",
+        time_signature: "4/4",
       });
 
       if (result.data) {
@@ -336,7 +387,7 @@ export default function ChatInterface() {
 
       const result = await deleteLoop(selectedLoop.id);
 
-      if (!result.data) {
+      if (result.error) {
         console.error("Failed to delete loop:", result.error);
         alert("Failed to delete loop. Please try again.");
         return;
@@ -370,8 +421,13 @@ export default function ChatInterface() {
     try {
       setIsCreatingTrack(true);
 
+      // Calculate the next track number based on existing tracks
+      const trackNumber = (songDetail?.tracks?.length || 0) + 1;
+      const trackTitle = `Track ${trackNumber}`;
+
       const result = await createTrack({
         song_id: selectedSongId,
+        title: trackTitle,
       });
 
       if (!result.data) {
@@ -390,6 +446,103 @@ export default function ChatInterface() {
       alert("Failed to create track. Please try again.");
     } finally {
       setIsCreatingTrack(false);
+    }
+  };
+
+  // Handle opening track modal
+  const handleOpenTrackModal = (track: Track) => {
+    setSelectedTrack(track);
+    setEditedTrackTitle(track.title);
+    setEditedTrackChannel(track.midi_channel);
+    setShowTrackModal(true);
+  };
+
+  // Handle track deletion
+  const handleDeleteTrack = async () => {
+    if (!selectedTrack) {
+      alert("No track selected");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this track? This will also delete all loops in this track. This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setIsDeletingTrack(true);
+
+      const result = await deleteTrack(selectedTrack.id);
+
+      if (result.error) {
+        console.error("Failed to delete track:", result.error);
+        alert("Failed to delete track. Please try again.");
+        return;
+      }
+
+      // Reload song details to reflect the deletion
+      if (songDetail && selectedSongId) {
+        const songResult = await getSong(selectedSongId);
+        if (songResult.data) {
+          setSongDetail(songResult.data);
+        }
+      }
+
+      // Close modal
+      setShowTrackModal(false);
+    } catch (error) {
+      console.error("Failed to delete track:", error);
+      alert("Failed to delete track. Please try again.");
+    } finally {
+      setIsDeletingTrack(false);
+    }
+  };
+
+  // Handle track update
+  const handleUpdateTrack = async () => {
+    if (!selectedTrack) {
+      alert("No track selected");
+      return;
+    }
+
+    if (!editedTrackTitle.trim()) {
+      alert("Track title cannot be empty");
+      return;
+    }
+
+    if (editedTrackChannel < 1 || editedTrackChannel > 16) {
+      alert("MIDI channel must be between 1 and 16");
+      return;
+    }
+
+    try {
+      setIsUpdatingTrack(true);
+
+      const result = await updateTrack(selectedTrack.id, {
+        title: editedTrackTitle,
+        midi_channel: editedTrackChannel,
+      });
+
+      if (result.error) {
+        console.error("Failed to update track:", result.error);
+        alert("Failed to update track. Please try again.");
+        return;
+      }
+
+      // Reload song details to reflect the update
+      if (songDetail && selectedSongId) {
+        const songResult = await getSong(selectedSongId);
+        if (songResult.data) {
+          setSongDetail(songResult.data);
+        }
+      }
+
+      // Close modal
+      setShowTrackModal(false);
+    } catch (error) {
+      console.error("Failed to update track:", error);
+      alert("Failed to update track. Please try again.");
+    } finally {
+      setIsUpdatingTrack(false);
     }
   };
 
@@ -428,6 +581,23 @@ export default function ChatInterface() {
           </Box>
           <Divider />
 
+          {/* Create New Song Button */}
+          <Box sx={{ p: 2 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<AddIcon />}
+              onClick={() => {
+                setShowNewSongModal(true);
+                setDrawerOpen(false);
+              }}
+              disabled={isCreatingSong}
+            >
+              New Song
+            </Button>
+          </Box>
+          <Divider />
+
           {/* Song List */}
           <List>
             {isLoadingSongs ? (
@@ -455,7 +625,7 @@ export default function ChatInterface() {
                       />
                     </ListItemButton>
                   </ListItem>
-              ))
+                ))
             )}
           </List>
         </Box>
@@ -473,181 +643,304 @@ export default function ChatInterface() {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" component="div">
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {songDetail?.title || "MIDI Agent"}
           </Typography>
+
+          {/* MIDI Output Selector */}
+          <FormControl variant="standard" sx={{ minWidth: 200 }}>
+            <InputLabel id="midi-output-label" sx={{ color: "inherit" }}>
+              MIDI Output
+            </InputLabel>
+            <Select
+              labelId="midi-output-label"
+              value={selectedMidiOutput.id}
+              onChange={(e) => {
+                const outputId = e.target.value;
+                if (outputId === "request-midi") {
+                  requestMidiAccess();
+                } else {
+                  const output = midiOutputs.find((o) => o.id === outputId);
+                  if (output) {
+                    setSelectedMidiOutput(output);
+                  }
+                }
+              }}
+              sx={{ color: "inherit", "& .MuiSelect-icon": { color: "inherit" } }}
+            >
+              {midiOutputs.map((output) => (
+                <MenuItem key={output.id} value={output.id}>
+                  {output.name}
+                </MenuItem>
+              ))}
+              {!hasMidiAccess && (
+                <MenuItem value="request-midi">Allow MIDI Access</MenuItem>
+              )}
+            </Select>
+          </FormControl>
         </Toolbar>
       </AppBar>
 
-      {/* Main container with responsive padding */}
-      <Container
-        maxWidth={false}
-        sx={{
-          flexGrow: 1,
-          px: { xs: 2, sm: 3, md: 4, lg: 6 },
-          py: 3,
-        }}
-      >
-        {isLoadingSongDetail ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-            <CircularProgress />
-          </Box>
-        ) : !songDetail ? (
-          <Box sx={{ textAlign: "center", py: 8 }}>
-            <Typography variant="h6" color="text.secondary">
-              No song selected
-            </Typography>
-          </Box>
-        ) : (
-          <Stack spacing={2}>
-            {/* Render each track as a row */}
-            {songDetail.tracks.map((track) => (
-              <Box
-                key={track.id}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: "1fr 2fr",
-                    md: "200px 1fr",
-                  },
-                  gap: 2,
-                  alignItems: "start",
-                }}
-              >
-                {/* Left column: Track name */}
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Track {track.midi_channel}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Channel {track.midi_channel}
-                    </Typography>
-                  </CardContent>
-                </Card>
-
-                {/* Right column: Loop cards */}
-                <Box sx={{ display: "flex", gap: 2, overflowX: "auto", pb: 1 }}>
-                  {/* Loop cards */}
-                  {track.loops.map((loop, index) => (
-                    <Card
-                      key={loop.id}
-                      sx={{
-                        minWidth: 200,
-                        flexShrink: 0,
-                        cursor: "pointer",
-                        "&:hover": {
-                          bgcolor: "action.hover",
-                          boxShadow: 2,
-                        },
-                      }}
-                      onClick={() => handleOpenEditLoopModal(loop)}
-                    >
-                      <CardContent>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Loop {index + 1}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {loop.measures} measures • {loop.midi_events.length} events
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {/* Create loop card */}
+      {/* Main content area */}
+      {isLoadingSongDetail ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+          <CircularProgress />
+        </Box>
+      ) : !songDetail ? (
+        <Box sx={{ textAlign: "center", py: 8 }}>
+          <Typography variant="h6" color="text.secondary">
+            No song selected
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
+          {/* Left fixed column: Track labels with full-height background */}
+          <Box
+            sx={{
+              flexShrink: 0,
+              bgcolor: "action.hover",
+              pr: 2,
+              py: 2,
+              display: "flex",
+              flexDirection: "column",
+              minHeight: "100%",
+            }}
+          >
+              <Stack spacing={2} sx={{ pl: 2, pt: 6 }}>
+                {/* Track label cards */}
+                {songDetail.tracks?.map((track) => (
                   <Card
+                    key={track.id}
                     sx={{
-                      minWidth: 200,
-                      flexShrink: 0,
-                      border: "2px dashed",
-                      borderColor: "divider",
+                      width: 140,
+                      height: 140,
                       cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                       "&:hover": {
-                        borderColor: "primary.main",
                         bgcolor: "action.hover",
+                        boxShadow: 2,
                       },
                     }}
-                    onClick={() => handleOpenCreateLoopModal(track.id)}
+                    onClick={() => handleOpenTrackModal(track)}
                   >
-                    <CardContent
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        minHeight: 80,
-                      }}
-                    >
-                      <Stack alignItems="center" spacing={1}>
-                        <AddIcon color="action" />
-                        <Typography variant="body2" color="text.secondary">
-                          Create Loop
-                        </Typography>
-                      </Stack>
+                    <CardContent sx={{ textAlign: "center", p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {track.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Channel {track.midi_channel}
+                      </Typography>
                     </CardContent>
                   </Card>
-                </Box>
-              </Box>
-            ))}
+                ))}
 
-            {/* Create Track row */}
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: {
-                  xs: "1fr 2fr",
-                  md: "200px 1fr",
-                },
-                gap: 2,
-                alignItems: "start",
-              }}
-            >
-              {/* Left column: Create Track card */}
-              <Card
-                sx={{
-                  border: "2px dashed",
-                  borderColor: "divider",
-                  cursor: "pointer",
-                  "&:hover": {
-                    borderColor: "primary.main",
-                    bgcolor: "action.hover",
-                  },
-                }}
-                onClick={handleCreateTrack}
-              >
-                <CardContent
+                {/* Create Track card */}
+                <Card
                   sx={{
+                    width: 140,
+                    height: 140,
+                    border: "2px dashed",
+                    borderColor: "divider",
+                    cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    minHeight: 80,
+                    "&:hover": {
+                      borderColor: "primary.main",
+                      bgcolor: "action.hover",
+                    },
                   }}
+                  onClick={handleCreateTrack}
                 >
-                  <Stack alignItems="center" spacing={1}>
-                    {isCreatingTrack ? (
-                      <CircularProgress size={24} />
-                    ) : (
-                      <>
-                        <AddIcon color="action" />
-                        <Typography variant="body2" color="text.secondary">
-                          Create Track
-                        </Typography>
-                      </>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              {/* Right column: Empty space */}
-              <Box />
+                  <CardContent sx={{ textAlign: "center", p: 2 }}>
+                    <Stack alignItems="center" spacing={1}>
+                      {isCreatingTrack ? (
+                        <CircularProgress size={24} />
+                      ) : (
+                        <>
+                          <AddIcon color="action" />
+                          <Typography variant="body2" color="text.secondary">
+                            Create Track
+                          </Typography>
+                        </>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Stack>
             </Box>
-          </Stack>
+
+            {/* Right scrollable area: Sequencer Grid */}
+            <Box sx={{ flex: 1, px: { xs: 2, sm: 3, md: 4, lg: 6 }, py: 2, overflowX: "auto", overflowY: "auto" }}>
+              {(() => {
+                // Calculate total measures needed for the grid
+                const MEASURE_WIDTH = 80; // pixels per measure
+                let totalMeasures = 8; // Minimum grid size
+
+                songDetail.tracks?.forEach((track) => {
+                  track.loops?.forEach((loop) => {
+                    const loopEnd = (loop.offset || 0) + loop.measures;
+                    if (loopEnd > totalMeasures) {
+                      totalMeasures = loopEnd;
+                    }
+                  });
+                });
+
+                // Add some extra measures for breathing room
+                totalMeasures += 4;
+
+                return (
+                  <Stack spacing={0}>
+                    {/* Measure Ruler */}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        height: 32,
+                        borderBottom: 2,
+                        borderColor: "divider",
+                        mb: 2,
+                      }}
+                    >
+                      {Array.from({ length: totalMeasures }, (_, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            width: MEASURE_WIDTH,
+                            flexShrink: 0,
+                            borderRight: 1,
+                            borderColor: "divider",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: "bold",
+                            color: "text.secondary",
+                            fontSize: "0.875rem",
+                          }}
+                        >
+                          {i + 1}
+                        </Box>
+                      ))}
+                    </Box>
+
+                    {/* Track Grid Rows */}
+                    {songDetail.tracks?.map((track) => (
+                      <Box
+                        key={track.id}
+                        sx={{
+                          position: "relative",
+                          height: 140 + 16, // Card height + spacing
+                          display: "flex",
+                          mb: 2,
+                        }}
+                      >
+                        {/* Grid background with measure markers */}
+                        {Array.from({ length: totalMeasures }, (_, i) => (
+                          <Box
+                            key={i}
+                            sx={{
+                              width: MEASURE_WIDTH,
+                              flexShrink: 0,
+                              borderRight: 1,
+                              borderColor: "divider",
+                              bgcolor: i % 4 === 0 ? "action.hover" : "transparent",
+                            }}
+                          />
+                        ))}
+
+                        {/* Positioned loops */}
+                        {track.loops?.map((loop, index) => {
+                          const offset = loop.offset || 0;
+                          const width = loop.measures * MEASURE_WIDTH;
+                          const left = offset * MEASURE_WIDTH;
+
+                          return (
+                            <Card
+                              key={loop.id}
+                              sx={{
+                                position: "absolute",
+                                left: `${left}px`,
+                                width: `${width}px`,
+                                height: 140,
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                "&:hover": {
+                                  bgcolor: "action.hover",
+                                  boxShadow: 2,
+                                },
+                              }}
+                              onClick={() => handleOpenEditLoopModal(loop)}
+                            >
+                              <CardContent sx={{ textAlign: "center", p: 2 }}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                  Loop {index + 1}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {loop.measures} measures • {loop.midi_events.length} events
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+
+                        {/* Create loop button at the end of existing loops */}
+                        {(() => {
+                          // Find the rightmost position
+                          let rightmostPosition = 0;
+                          track.loops?.forEach((loop) => {
+                            const loopEnd = (loop.offset || 0) + loop.measures;
+                            if (loopEnd > rightmostPosition) {
+                              rightmostPosition = loopEnd;
+                            }
+                          });
+
+                          return (
+                            <Card
+                              sx={{
+                                position: "absolute",
+                                left: `${rightmostPosition * MEASURE_WIDTH}px`,
+                                width: MEASURE_WIDTH,
+                                height: 140,
+                                border: "2px dashed",
+                                borderColor: "divider",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                "&:hover": {
+                                  borderColor: "primary.main",
+                                  bgcolor: "action.hover",
+                                },
+                              }}
+                              onClick={() => handleOpenCreateLoopModal(track.id)}
+                            >
+                              <CardContent sx={{ textAlign: "center", p: 1 }}>
+                                <Stack alignItems="center" spacing={0.5}>
+                                  <AddIcon color="action" fontSize="small" />
+                                  <Typography variant="caption" color="text.secondary">
+                                    Loop
+                                  </Typography>
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          );
+                        })()}
+                      </Box>
+                    ))}
+                  </Stack>
+                );
+              })()}
+            </Box>
+          </Box>
         )}
-      </Container>
 
       {/* New Song Modal */}
       <Modal
         open={showNewSongModal}
-        onClose={() => {}}
+        onClose={() => songs.length > 0 && setShowNewSongModal(false)}
         aria-labelledby="new-song-modal-title"
         aria-describedby="new-song-modal-description"
       >
@@ -665,19 +958,33 @@ export default function ChatInterface() {
           }}
         >
           <Typography id="new-song-modal-title" variant="h6" component="h2" gutterBottom>
-            Welcome to MIDI Agent
+            {songs.length === 0 ? "Welcome to MIDI Agent" : "Create New Song"}
           </Typography>
           <Typography id="new-song-modal-description" sx={{ mb: 3 }}>
-            You don't have any songs yet. Create your first song to get started.
+            {songs.length === 0
+              ? "You don't have any songs yet. Create your first song to get started."
+              : "Create a new song with default settings (C major, 120 BPM)."}
           </Typography>
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleCreateSong}
-            disabled={isCreatingSong}
-          >
-            {isCreatingSong ? <CircularProgress size={24} /> : "New Song"}
-          </Button>
+          <Stack direction="row" spacing={2}>
+            {songs.length > 0 && (
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => setShowNewSongModal(false)}
+                disabled={isCreatingSong}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleCreateSong}
+              disabled={isCreatingSong}
+            >
+              {isCreatingSong ? <CircularProgress size={24} /> : "Create Song"}
+            </Button>
+          </Stack>
         </Box>
       </Modal>
 
@@ -783,7 +1090,7 @@ export default function ChatInterface() {
                               sx={{
                                 p: 2,
                                 maxWidth: "75%",
-                                bgcolor: message.role === "user" ? "primary.main" : "grey.100",
+                                bgcolor: message.role === "user" ? "primary.main" : "action.hover",
                                 color: message.role === "user" ? "primary.contrastText" : "text.primary",
                               }}
                             >
@@ -892,6 +1199,138 @@ export default function ChatInterface() {
           </Box>
         </Box>
       </Modal>
+
+      {/* Track Modal */}
+      <Modal
+        open={showTrackModal}
+        onClose={() => !isDeletingTrack && !isUpdatingTrack && setShowTrackModal(false)}
+        aria-labelledby="track-modal-title"
+      >
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: { xs: "90%", sm: 600 },
+            maxHeight: "90vh",
+            bgcolor: "background.paper",
+            boxShadow: 24,
+            borderRadius: 2,
+            p: 4,
+          }}
+        >
+          {/* Header */}
+          <Typography id="track-modal-title" variant="h6" component="h2" gutterBottom>
+            Edit Track
+          </Typography>
+
+          {/* Editable Fields */}
+          <Stack spacing={3} sx={{ my: 3 }}>
+            <TextField
+              label="Track Title"
+              value={editedTrackTitle}
+              onChange={(e) => setEditedTrackTitle(e.target.value)}
+              fullWidth
+              disabled={isUpdatingTrack || isDeletingTrack}
+              required
+            />
+
+            <TextField
+              label="MIDI Channel"
+              type="number"
+              value={editedTrackChannel}
+              onChange={(e) => setEditedTrackChannel(parseInt(e.target.value) || 1)}
+              fullWidth
+              disabled={isUpdatingTrack || isDeletingTrack}
+              inputProps={{ min: 1, max: 16, step: 1 }}
+              helperText="MIDI channel (1-16)"
+              required
+            />
+          </Stack>
+
+          {/* Footer */}
+          <Box sx={{ display: "flex", justifyContent: "space-between", pt: 2 }}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleDeleteTrack}
+              disabled={isDeletingTrack || isUpdatingTrack}
+            >
+              {isDeletingTrack ? <CircularProgress size={24} /> : "Delete"}
+            </Button>
+            <Stack direction="row" spacing={2}>
+              <Button
+                variant="outlined"
+                onClick={() => setShowTrackModal(false)}
+                disabled={isDeletingTrack || isUpdatingTrack}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleUpdateTrack}
+                disabled={isDeletingTrack || isUpdatingTrack || !editedTrackTitle.trim()}
+              >
+                {isUpdatingTrack ? <CircularProgress size={24} /> : "Save"}
+              </Button>
+            </Stack>
+          </Box>
+        </Box>
+      </Modal>
+
+      {/* Floating Playback Control Bar */}
+      <Box
+        sx={{
+          position: "fixed",
+          bottom: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: (theme) => theme.zIndex.appBar,
+          boxShadow: 4,
+        }}
+      >
+        <Paper
+          elevation={8}
+          sx={{
+            px: 3,
+            py: 2,
+            borderRadius: 4,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2,
+            bgcolor: "background.paper",
+          }}
+        >
+          {/* BPM Input */}
+          <TextField
+            label="BPM"
+            type="number"
+            value={bpm}
+            onChange={(e) => setPlaybackBpm(parseInt(e.target.value) || 120)}
+            size="small"
+            inputProps={{ min: 30, max: 300, step: 1 }}
+            sx={{ width: 100 }}
+          />
+
+          {/* Play/Pause Button */}
+          <IconButton
+            color="primary"
+            size="large"
+            onClick={togglePlayPause}
+            sx={{
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+              "&:hover": {
+                bgcolor: "primary.dark",
+              },
+            }}
+          >
+            {isPlaying ? <PauseIcon fontSize="large" /> : <PlayArrowIcon fontSize="large" />}
+          </IconButton>
+        </Paper>
+      </Box>
     </Box>
   );
 }

@@ -51,8 +51,7 @@ async def create_loop(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create loop") from e
+        raise HTTPException(status_code=500, detail="Failed to create loop") from e
 
 
 @router.get("/loops/{loop_id}", response_model=loop_schemas.LoopDetailResponse)
@@ -69,7 +68,7 @@ async def get_loop(loop_id: str, db: Session = Depends(database.get_db)) -> loop
         )
         if not loop:
             raise HTTPException(status_code=404)
-        
+
         return loop.to_detail_response()
 
     except HTTPException:
@@ -78,7 +77,7 @@ async def get_loop(loop_id: str, db: Session = Depends(database.get_db)) -> loop
         raise HTTPException(status_code=500) from e
 
 
-@router.delete("/loops/{loop_id}", status_code=201)
+@router.delete("/loops/{loop_id}", status_code=204)
 async def delete_loop(
     loop_id: str,
     db: Session = Depends(database.get_db),
@@ -109,7 +108,6 @@ async def delete_loop(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete loop: {str(e)}") from e
 
 
@@ -135,7 +133,11 @@ async def append_chat(
 
         agent = midi_agents.get_agent()
         loop: loop_models.MidiLoop = await agent.invoke(
-            user_id=user_id, track_id=loop.track_id, loop_id=loop.id, user_prompt=request.msg, expect_measures=request.measures
+            user_id=user_id,
+            track_id=loop.track_id,
+            loop_id=loop.id,
+            user_prompt=request.msg,
+            expect_measures=request.measures,
         )
 
         return loop.to_detail_response()
@@ -143,5 +145,4 @@ async def append_chat(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create chat message: {str(e)}") from e

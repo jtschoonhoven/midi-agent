@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from api.auth import get_current_user_id
 from api.database import get_db
-from api.loops import loop_schemas
 from api.songs import song_models, song_schemas
 from api.songs.song_constants import ADJECTIVES, NOUNS
 from api.tracks import track_models
@@ -155,19 +154,7 @@ async def create_song(
     user_id: UUID = Depends(get_current_user_id),
 ) -> song_schemas.SongDetailResponse:
     """
-    Create a new song with an empty track.
-
-    Args:
-        request: Song creation request with title, bpm, and key
-        db: Database session
-        user_id: User ID from Authorization header
-
-    Returns:
-        SongDetailResponse with the new song and its empty track
-
-    Raises:
-        HTTPException: If creation fails
-    """
+    Create a new song with an empty track."""
     try:
         # Auto-generate title if not provided
         title = request.title
@@ -189,6 +176,7 @@ async def create_song(
         # Create an empty track with default MIDI channel 1
         track = track_models.MidiTrack(
             song_id=song.id,
+            title="Track 1",
             midi_channel=1,
         )
         db.add(track)
@@ -198,7 +186,6 @@ async def create_song(
 
         return song.to_detail_response()
     except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create song: {str(e)}") from e
 
 

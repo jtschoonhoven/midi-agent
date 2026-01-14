@@ -23,10 +23,13 @@ class Base(DeclarativeBase):
 
 
 def get_db():
-    """Dependency for getting database sessions."""
+    """Dependency for getting database sessions with automatic rollback on errors."""
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

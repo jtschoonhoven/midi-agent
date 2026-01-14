@@ -6,7 +6,7 @@ from uuid import UUID
 import pydantic
 from pydantic import ConfigDict
 
-from api.loops import loop_schemas
+from api.tracks import track_schemas
 
 # Type aliases
 Key = Literal["Ab", "A", "A#", "Bb", "B", "C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#"]
@@ -68,19 +68,6 @@ class ConversationRestoreResponse(pydantic.BaseModel):
     )
 
 
-class TrackResponse(pydantic.BaseModel):
-    """Response model for MIDI tracks."""
-
-    id: str = pydantic.Field(description="Track ID")
-    song_id: str = pydantic.Field(description="ID of the parent song")
-    midi_channel: int = pydantic.Field(gt=0, description="MIDI channel (1-16)")
-    loops: list[loop_schemas.LoopResponse] = pydantic.Field(default_factory=list, description="Loops in this track")
-    created_at: str = pydantic.Field(description="ISO timestamp of creation")
-    updated_at: str = pydantic.Field(description="ISO timestamp of last update")
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class SongResponse(pydantic.BaseModel):
     """Response model for MIDI songs including tracks and loops."""
 
@@ -88,6 +75,7 @@ class SongResponse(pydantic.BaseModel):
     title: str = pydantic.Field(description="Song title")
     bpm: int = pydantic.Field(description="Tempo in BPM")
     key: str = pydantic.Field(description="Musical key")
+    time_signature: str = pydantic.Field(description="Time signature")
     created_at: str = pydantic.Field(description="ISO timestamp of creation")
     updated_at: str = pydantic.Field(description="ISO timestamp of last update")
 
@@ -97,7 +85,7 @@ class SongResponse(pydantic.BaseModel):
 class SongDetailResponse(SongResponse):
     """Response model for MIDI songs including tracks and loops."""
 
-    tracks: list[TrackResponse] = pydantic.Field(default_factory=list, description="Tracks in this song")
+    tracks: list[track_schemas.TrackDetailResponse] = pydantic.Field(description="Tracks in this song")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,3 +96,4 @@ class CreateSongRequest(pydantic.BaseModel):
     title: str | None = pydantic.Field(None, description="Song title (optional)")
     bpm: int = pydantic.Field(gt=29, lt=361, description="Tempo in BPM (30-360)")
     key: Key = pydantic.Field(description="Musical key")
+    time_signature: TimeSignature = pydantic.Field(description="Time signature")

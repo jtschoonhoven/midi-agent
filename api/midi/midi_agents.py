@@ -1,6 +1,5 @@
 """
 Weave (Weights & Biases) models for LLM observability.
-Usually *_models.py files contain database ORM models, but in this case they are Weave models and associated schemas.
 Docs: https://docs.wandb.ai/weave/guides/core-types/models
 """
 
@@ -14,16 +13,13 @@ import weave
 from fastapi import HTTPException
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from sqlalchemy.orm import Session, joinedload
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
-from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats import chat_models
+from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.database import SessionLocal
-from api.loops import loop_models
+from api.loops import loop_utils
 from api.midi import midi_evals
-from api.songs import song_models
-from api.tracks import track_models
 
 if TYPE_CHECKING:
     from api.chats.chat_models import ModelName
@@ -91,7 +87,9 @@ def get_agent() -> "_GenerateMidi":
 
 
 @weave.op()
-async def generate_midi(model_name: "ModelName", expect_measures: int, chat_history: ChatHistory) -> "GenerateMidiResponse":
+async def generate_midi(
+    model_name: "ModelName", expect_measures: int, chat_history: ChatHistory
+) -> "GenerateMidiResponse":
     """
     Run inference to generate MIDI events using the given model and chat history.
     Injects a constraint to restrict the number of measures generated.
@@ -102,7 +100,9 @@ async def generate_midi(model_name: "ModelName", expect_measures: int, chat_hist
 
     # Inject a constraint for the number of measures
     user_msg = chat_history[-1].content
-    chat_history[-1].content = f"{user_msg}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
+    chat_history[
+        -1
+    ].content = f"{user_msg}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
 
     # Get provider from the map (returns tuple of (provider, model_name))
     provider, _ = MODEL_PROVIDER_MAP[model_name]
@@ -127,7 +127,7 @@ class _GenerateMidi(weave.Model):
     system_prompt: str
 
     @weave.op()
-    async def invoke(self, *, user_id: UUID, track_id: UUID, loop_id: UUID, user_prompt: str, expect_measures: int) -> "MidiLoop":
+    async def invoke(self, *, user_id: UUID, loop_id: UUID, user_prompt: str, expect_measures: int) -> "MidiLoop":
         """Generate MIDI events from a user prompt and save to database.
 
         Returns:
@@ -146,7 +146,7 @@ class _GenerateMidi(weave.Model):
             raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
 
         # Get the chat history and add the current prompt
-        chat_history = self.load_chat_history(user_id=user_id, track_id=track_id, loop_id=loop_id, system_prompt=GENERATION_PROMPT)
+        chat_history = self.load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=GENERATION_PROMPT)
         chat_history.append(HumanMessage(content=user_prompt))
 
         # Invoke model with structured output
@@ -165,7 +165,6 @@ class _GenerateMidi(weave.Model):
         # Save to database: create new loop and chat messages
         loop = self.update_loop(
             user_id=user_id,
-            track_id=track_id,
             loop_id=loop_id,
             user_prompt=user_prompt,
             agent_description=response.description,
@@ -175,20 +174,11 @@ class _GenerateMidi(weave.Model):
 
     @staticmethod
     def load_chat_history(
-        *, user_id: UUID, track_id: UUID, loop_id: UUID, system_prompt: str
+        *, user_id: UUID, loop_id: UUID, system_prompt: str
     ) -> list[SystemMessage | HumanMessage | AIMessage]:
         """Load chat history from a specific loop or the most recent loop in a track."""
-        db: Session = SessionLocal()
-
-        try:
-            loop = (
-                db.query(loop_models.MidiLoop)
-                .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
-                .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-                .options(joinedload(loop_models.MidiLoop.chat_messages))
-                .filter(loop_models.MidiLoop.id == str(loop_id), track_models.MidiTrack.id == str(track_id), song_models.MidiSong.user_id == str(user_id))
-                .first()
-            )
+        with SessionLocal() as db:
+            loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
             if not loop:
                 raise HTTPException(status_code=404)
 
@@ -209,38 +199,24 @@ class _GenerateMidi(weave.Model):
 
             return history
 
-        finally:
-            db.close()
-
     def update_loop(
         self,
         *,
         user_id: UUID,
-        track_id: UUID,
         loop_id: UUID,
         user_prompt: str,
         agent_description: str,
         midi_events: list[MidiEvent],
     ) -> "MidiLoop":
         """Save generated MIDI to database as a new loop with chat messages."""
-        db: Session = SessionLocal()
-
-        try:
-            # Fetch the loop and verify track exists and belongs to user (assumed to exist)
-            loop = (
-                db.query(loop_models.MidiLoop)
-                .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
-                .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-                .options(joinedload(loop_models.MidiLoop.chat_messages))
-                .filter(loop_models.MidiLoop.id == str(loop_id), track_models.MidiTrack.id == str(track_id), song_models.MidiSong.user_id == str(user_id))
-                .first()
-            )
+        with SessionLocal() as db:
+            loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
             if not loop:
                 raise HTTPException(status_code=404)
 
             # Update the loop with the new MIDI events
-            loop.measures = max(event.measure for event in midi_events) + 1
+            loop.measures = max(event.measure for event in midi_events)
             loop.midi_events = [event.model_dump() for event in midi_events]
             db.add(loop)
 
@@ -271,13 +247,6 @@ class _GenerateMidi(weave.Model):
             db.refresh(loop)
 
             return loop
-
-        except Exception as e:
-            db.rollback()
-            raise e
-
-        finally:
-            db.close()
 
 
 class GenerateMidiEvent(pydantic.BaseModel):
@@ -427,7 +396,6 @@ if __name__ == "__main__":
     # Validate UUIDs
     try:
         user_id = UUID(args.user_id)
-        track_id = UUID(args.track_id)
         loop_id = UUID(args.loop_id) if args.loop_id else None
     except ValueError as e:
         print(f"Error: Invalid UUID format - {e}", file=sys.stderr)
@@ -441,7 +409,6 @@ if __name__ == "__main__":
         try:
             midi_events, new_loop_id = await model.invoke(
                 user_id=user_id,
-                track_id=track_id,
                 loop_id=loop_id,
                 user_prompt=args.prompt,
                 expect_measures=args.measures,

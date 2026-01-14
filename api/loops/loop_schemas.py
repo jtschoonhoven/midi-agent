@@ -22,6 +22,7 @@ class LoopResponse(pydantic.BaseModel):
     """Response model for MIDI loops, excluding chat message history."""
 
     id: str = pydantic.Field(description="Loop ID")
+    offset: int = pydantic.Field(description="Position offset in measures from start of song")
     measures: int = pydantic.Field(description="Number of measures in the loop")
     repeat: int = pydantic.Field(description="Number of times to repeat the loop")
     midi_events: list[dict] = pydantic.Field(description="MIDI events in the loop")
@@ -46,7 +47,7 @@ class CreateLoopRequest(pydantic.BaseModel):
     """Request model for creating a new loop."""
 
     track_id: str = pydantic.Field(description="ID of the parent track")
-    measures: int = pydantic.Field(gt=0, le=33, description="Number of measures in the loop (1-32)")
+    measures: int = pydantic.Field(ge=0, le=32, description="Number of measures in the loop (1-32)")
     repeat: int = pydantic.Field(default=1, gt=0, description="Number of times to repeat the loop (default: 1)")
 
 
@@ -62,4 +63,4 @@ class AppendChatRequest(pydantic.BaseModel):
 
     loop_id: str = pydantic.Field(description="ID of the loop to add the chat message to")
     msg: str = pydantic.Field(min_length=1, description="User message content")
-    measures: int = pydantic.Field(gt=0, le=33, description="Number of measures in the loop (1-32)")
+    measures: int = pydantic.Field(ge=1, le=32, description="Number of measures in the loop (1-32)")

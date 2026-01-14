@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { ThemeProvider, CssBaseline, useMediaQuery } from '@mui/material'
 import ChatInterface from './components/ChatInterface'
 import { lightTheme, darkTheme } from './theme'
+import { PlaybackProvider } from './contexts/PlaybackContext'
 
 function App() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)')
@@ -14,7 +15,9 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <ChatInterface />
+      <PlaybackProvider>
+        <ChatInterface />
+      </PlaybackProvider>
     </ThemeProvider>
   )
 }

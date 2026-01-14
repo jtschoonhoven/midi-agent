@@ -30,17 +30,6 @@ export interface paths {
         /**
          * Create Song
          * @description Create a new song with an empty track.
-         *
-         *     Args:
-         *         request: Song creation request with title, bpm, and key
-         *         db: Database session
-         *         user_id: User ID from Authorization header
-         *
-         *     Returns:
-         *         SongDetailResponse with the new song and its empty track
-         *
-         *     Raises:
-         *         HTTPException: If creation fails
          */
         post: operations["create_song_api_midi_songs__post"];
         delete?: never;
@@ -175,6 +164,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/midi/tracks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Track
+         * @description Create a new MIDI track for a song.
+         *
+         *     The MIDI channel is automatically assigned as the next available channel
+         *     based on existing tracks in the song (max channel + 1).
+         */
+        post: operations["create_track_api_midi_tracks__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/tracks/{track_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Track
+         * @description Delete a track and all associated loops.
+         *
+         *     The loops are automatically deleted via cascade relationship.
+         */
+        delete: operations["delete_track_api_midi_tracks__track_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Track
+         * @description Update a track's title and/or MIDI channel.
+         *     Both fields are optional - only provided fields will be updated.
+         */
+        patch: operations["update_track_api_midi_tracks__track_id__patch"];
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -214,6 +253,11 @@ export interface components {
              * @description User message content
              */
             msg: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop (1-32)
+             */
+            measures: number;
         };
         /**
          * ChatMessageResponse
@@ -301,6 +345,28 @@ export interface components {
              * @enum {string}
              */
             key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#";
+            /**
+             * Time Signature
+             * @description Time signature
+             * @enum {string}
+             */
+            time_signature: "3/4" | "4/4" | "5/4" | "6/8" | "7/8";
+        };
+        /**
+         * CreateTrackRequest
+         * @description Request model for creating a new track.
+         */
+        CreateTrackRequest: {
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Title
+             * @description Track title
+             */
+            title: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -317,6 +383,11 @@ export interface components {
              * @description Loop ID
              */
             id: string;
+            /**
+             * Offset
+             * @description Position offset in measures from start of song
+             */
+            offset: number;
             /**
              * Measures
              * @description Number of measures in the loop
@@ -365,6 +436,11 @@ export interface components {
              * @description Loop ID
              */
             id: string;
+            /**
+             * Offset
+             * @description Position offset in measures from start of song
+             */
+            offset: number;
             /**
              * Measures
              * @description Number of measures in the loop
@@ -441,6 +517,22 @@ export interface components {
             value: number;
         };
         /**
+         * PatchTrackRequest
+         * @description Request model for updating a track.
+         */
+        PatchTrackRequest: {
+            /**
+             * Title
+             * @description Track title (optional)
+             */
+            title?: string | null;
+            /**
+             * Midi Channel
+             * @description MIDI channel 1-16 (optional)
+             */
+            midi_channel?: number | null;
+        };
+        /**
          * RenderRequest
          * @description Request payload for /api/midi/render endpoint.
          */
@@ -503,6 +595,11 @@ export interface components {
              */
             key: string;
             /**
+             * Time Signature
+             * @description Time signature
+             */
+            time_signature: string;
+            /**
              * Created At
              * @description ISO timestamp of creation
              */
@@ -516,7 +613,7 @@ export interface components {
              * Tracks
              * @description Tracks in this song
              */
-            tracks?: components["schemas"]["TrackResponse"][];
+            tracks?: components["schemas"]["TrackDetailResponse"][];
         };
         /**
          * SongResponse
@@ -544,6 +641,11 @@ export interface components {
              */
             key: string;
             /**
+             * Time Signature
+             * @description Time signature
+             */
+            time_signature: string;
+            /**
              * Created At
              * @description ISO timestamp of creation
              */
@@ -555,8 +657,49 @@ export interface components {
             updated_at: string;
         };
         /**
+         * TrackDetailResponse
+         * @description Response model for MIDI tracks including loops.
+         */
+        TrackDetailResponse: {
+            /**
+             * Id
+             * @description Track ID
+             */
+            id: string;
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Title
+             * @description Track title
+             */
+            title: string;
+            /**
+             * Midi Channel
+             * @description MIDI channel (1-16)
+             */
+            midi_channel: number;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
+             * Loops
+             * @description Loops in this track
+             */
+            loops?: components["schemas"]["LoopResponse"][];
+        };
+        /**
          * TrackResponse
-         * @description Response model for MIDI tracks.
+         * @description Response model for MIDI tracks (excludes loops).
          */
         TrackResponse: {
             /**
@@ -570,15 +713,15 @@ export interface components {
              */
             song_id: string;
             /**
+             * Title
+             * @description Track title
+             */
+            title: string;
+            /**
              * Midi Channel
              * @description MIDI channel (1-16)
              */
             midi_channel: number;
-            /**
-             * Loops
-             * @description Loops in this track
-             */
-            loops?: components["schemas"]["LoopResponse"][];
             /**
              * Created At
              * @description ISO timestamp of creation
@@ -801,15 +944,11 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -842,6 +981,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_track_api_midi_tracks__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTrackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_track_api_midi_tracks__track_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_track_api_midi_tracks__track_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchTrackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackResponse"];
                 };
             };
             /** @description Validation Error */

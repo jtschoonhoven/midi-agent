@@ -36,7 +36,7 @@
           "midi"
         ],
         "summary": "Create Song",
-        "description": "Create a new song with an empty track.\n\nArgs:\n    request: Song creation request with title, bpm, and key\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongDetailResponse with the new song and its empty track\n\nRaises:\n    HTTPException: If creation fails",
+        "description": "Create a new song with an empty track.",
         "operationId": "create_song_api_midi_songs__post",
         "requestBody": {
           "content": {
@@ -260,19 +260,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Delete Loop Api Midi Loops  Loop Id  Delete"
-                }
-              }
-            }
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -329,6 +318,135 @@
         }
       }
     },
+    "/api/midi/tracks/": {
+      "post": {
+        "tags": [
+          "tracks"
+        ],
+        "summary": "Create Track",
+        "description": "Create a new MIDI track for a song.\n\nThe MIDI channel is automatically assigned as the next available channel\nbased on existing tracks in the song (max channel + 1).",
+        "operationId": "create_track_api_midi_tracks__post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTrackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/midi/tracks/{track_id}": {
+      "delete": {
+        "tags": [
+          "tracks"
+        ],
+        "summary": "Delete Track",
+        "description": "Delete a track and all associated loops.\n\nThe loops are automatically deleted via cascade relationship.",
+        "operationId": "delete_track_api_midi_tracks__track_id__delete",
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "tracks"
+        ],
+        "summary": "Update Track",
+        "description": "Update a track's title and/or MIDI channel.\nBoth fields are optional - only provided fields will be updated.",
+        "operationId": "update_track_api_midi_tracks__track_id__patch",
+        "parameters": [
+          {
+            "name": "track_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Track Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchTrackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health Check",
@@ -367,12 +485,20 @@
             "minLength": 1,
             "title": "Msg",
             "description": "User message content"
+          },
+          "measures": {
+            "type": "integer",
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Measures",
+            "description": "Number of measures in the loop (1-32)"
           }
         },
         "type": "object",
         "required": [
           "loop_id",
-          "msg"
+          "msg",
+          "measures"
         ],
         "title": "AppendChatRequest",
         "description": "Request model for appending a new chat message to a loop."
@@ -447,8 +573,8 @@
           },
           "measures": {
             "type": "integer",
-            "maximum": 33.0,
-            "exclusiveMinimum": 0.0,
+            "maximum": 32.0,
+            "minimum": 0.0,
             "title": "Measures",
             "description": "Number of measures in the loop (1-32)"
           },
@@ -512,15 +638,50 @@
             ],
             "title": "Key",
             "description": "Musical key"
+          },
+          "time_signature": {
+            "type": "string",
+            "enum": [
+              "3/4",
+              "4/4",
+              "5/4",
+              "6/8",
+              "7/8"
+            ],
+            "title": "Time Signature",
+            "description": "Time signature"
           }
         },
         "type": "object",
         "required": [
           "bpm",
-          "key"
+          "key",
+          "time_signature"
         ],
         "title": "CreateSongRequest",
         "description": "Request payload for creating a new song."
+      },
+      "CreateTrackRequest": {
+        "properties": {
+          "song_id": {
+            "type": "string",
+            "title": "Song Id",
+            "description": "ID of the parent song"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "Track title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "song_id",
+          "title"
+        ],
+        "title": "CreateTrackRequest",
+        "description": "Request model for creating a new track."
       },
       "HTTPValidationError": {
         "properties": {
@@ -541,6 +702,11 @@
             "type": "string",
             "title": "Id",
             "description": "Loop ID"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Position offset in measures from start of song"
           },
           "measures": {
             "type": "integer",
@@ -588,6 +754,7 @@
         "type": "object",
         "required": [
           "id",
+          "offset",
           "measures",
           "repeat",
           "midi_events",
@@ -604,6 +771,11 @@
             "type": "string",
             "title": "Id",
             "description": "Loop ID"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Position offset in measures from start of song"
           },
           "measures": {
             "type": "integer",
@@ -643,6 +815,7 @@
         "type": "object",
         "required": [
           "id",
+          "offset",
           "measures",
           "repeat",
           "midi_events",
@@ -925,6 +1098,40 @@
         "title": "MidiEvent",
         "description": "A fully resolved MIDI event with explicit timing."
       },
+      "PatchTrackRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Track title (optional)"
+          },
+          "midi_channel": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 16.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Midi Channel",
+            "description": "MIDI channel 1-16 (optional)"
+          }
+        },
+        "type": "object",
+        "title": "PatchTrackRequest",
+        "description": "Request model for updating a track."
+      },
       "RenderRequest": {
         "properties": {
           "bpm": {
@@ -1002,6 +1209,11 @@
             "title": "Key",
             "description": "Musical key"
           },
+          "time_signature": {
+            "type": "string",
+            "title": "Time Signature",
+            "description": "Time signature"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -1014,7 +1226,7 @@
           },
           "tracks": {
             "items": {
-              "$ref": "#/components/schemas/TrackResponse"
+              "$ref": "#/components/schemas/TrackDetailResponse"
             },
             "type": "array",
             "title": "Tracks",
@@ -1027,6 +1239,7 @@
           "title",
           "bpm",
           "key",
+          "time_signature",
           "created_at",
           "updated_at"
         ],
@@ -1055,6 +1268,11 @@
             "title": "Key",
             "description": "Musical key"
           },
+          "time_signature": {
+            "type": "string",
+            "title": "Time Signature",
+            "description": "Time signature"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -1072,11 +1290,66 @@
           "title",
           "bpm",
           "key",
+          "time_signature",
           "created_at",
           "updated_at"
         ],
         "title": "SongResponse",
         "description": "Response model for MIDI songs including tracks and loops."
+      },
+      "TrackDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Track ID"
+          },
+          "song_id": {
+            "type": "string",
+            "title": "Song Id",
+            "description": "ID of the parent song"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Track title"
+          },
+          "midi_channel": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Midi Channel",
+            "description": "MIDI channel (1-16)"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of creation"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "ISO timestamp of last update"
+          },
+          "loops": {
+            "items": {
+              "$ref": "#/components/schemas/LoopResponse"
+            },
+            "type": "array",
+            "title": "Loops",
+            "description": "Loops in this track"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "song_id",
+          "title",
+          "midi_channel",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TrackDetailResponse",
+        "description": "Response model for MIDI tracks including loops."
       },
       "TrackResponse": {
         "properties": {
@@ -1090,19 +1363,16 @@
             "title": "Song Id",
             "description": "ID of the parent song"
           },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Track title"
+          },
           "midi_channel": {
             "type": "integer",
             "exclusiveMinimum": 0.0,
             "title": "Midi Channel",
             "description": "MIDI channel (1-16)"
-          },
-          "loops": {
-            "items": {
-              "$ref": "#/components/schemas/LoopResponse"
-            },
-            "type": "array",
-            "title": "Loops",
-            "description": "Loops in this track"
           },
           "created_at": {
             "type": "string",
@@ -1119,12 +1389,13 @@
         "required": [
           "id",
           "song_id",
+          "title",
           "midi_channel",
           "created_at",
           "updated_at"
         ],
         "title": "TrackResponse",
-        "description": "Response model for MIDI tracks."
+        "description": "Response model for MIDI tracks (excludes loops)."
       },
       "ValidationError": {
         "properties": {

@@ -22,6 +22,7 @@ class MidiLoop(Base):
     __tablename__ = "midi_loops"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # In measures
     measures: Mapped[int] = mapped_column(Integer, nullable=False)
     repeat: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     midi_events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
@@ -38,11 +39,12 @@ class MidiLoop(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<MidiLoop(id={self.id}, measures={self.measures}, repeat={self.repeat})>"
+        return f"<MidiLoop(id={self.id}, offset={self.offset}, measures={self.measures}, repeat={self.repeat})>"
 
     def to_response(self) -> "LoopResponse":
         return loop_schemas.LoopResponse(
             id=self.id,
+            offset=self.offset,
             measures=self.measures,
             repeat=self.repeat,
             midi_events=self.midi_events,
@@ -54,6 +56,7 @@ class MidiLoop(Base):
     def to_detail_response(self) -> "LoopDetailResponse":
         return loop_schemas.LoopDetailResponse(
             id=self.id,
+            offset=self.offset,
             measures=self.measures,
             repeat=self.repeat,
             midi_events=self.midi_events,

@@ -2,33 +2,22 @@
 
 from uuid import UUID
 
-import pydantic
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from api import auth, database
-from api.songs import song_models, song_schemas
-from api.tracks import track_models
-
-
-class CreateTrackRequest(pydantic.BaseModel):
-    """Request model for creating a new track."""
-
-    song_id: str = pydantic.Field(description="ID of the parent song")
-
-    model_config = ConfigDict(from_attributes=True)
-
+from api.songs import song_utils
+from api.tracks import track_models, track_schemas, track_utils
 
 router = APIRouter(prefix="/api/midi", tags=["tracks"])
 
 
-@router.post("/tracks/", response_model=song_schemas.TrackResponse)
+@router.post("/tracks/", response_model=track_schemas.TrackDetailResponse)
 async def create_track(
-    request: CreateTrackRequest,
+    request: "track_schemas.CreateTrackRequest",
     db: Session = Depends(database.get_db),
     user_id: UUID = Depends(auth.get_current_user_id),
-) -> song_schemas.TrackResponse:
+) -> "track_schemas.TrackDetailResponse":
     """
     Create a new MIDI track for a song.
 
@@ -37,20 +26,14 @@ async def create_track(
     """
     try:
         # Validate that the song exists and belongs to the user
-        song = (
-            db.query(song_models.MidiSong)
-            .filter(song_models.MidiSong.id == request.song_id, song_models.MidiSong.user_id == str(user_id))
-            .first()
-        )
+        song = song_utils.get_song_for_user(db, user_id, request.song_id)
 
         if not song:
             raise HTTPException(status_code=404, detail="Song not found")
 
         # Find the highest MIDI channel currently used in this song
         existing_tracks = (
-            db.query(track_models.MidiTrack)
-            .filter(track_models.MidiTrack.song_id == request.song_id)
-            .all()
+            db.query(track_models.MidiTrack).filter(track_models.MidiTrack.song_id == request.song_id).all()
         )
 
         if existing_tracks:
@@ -66,16 +49,65 @@ async def create_track(
         # Create new track
         new_track = track_models.MidiTrack(
             song_id=request.song_id,
+            title=request.title,
             midi_channel=next_channel,
         )
         db.add(new_track)
         db.commit()
         db.refresh(new_track)
 
-        return new_track.to_response()
+        return new_track.to_detail_response()
 
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create track: {str(e)}") from e
+
+
+@router.delete("/tracks/{track_id}", status_code=204)
+async def delete_track(
+    track_id: str,
+    db: Session = Depends(database.get_db),
+    user_id: UUID = Depends(auth.get_current_user_id),
+) -> None:
+    """
+    Delete a track and all associated loops.
+
+    The loops are automatically deleted via cascade relationship.
+    """
+    track = track_utils.get_track_for_user(db, user_id, track_id)
+
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    # Delete the track (loops are cascade deleted)
+    db.delete(track)
+    db.commit()
+
+
+@router.patch("/tracks/{track_id}", response_model=track_schemas.TrackResponse)
+async def update_track(
+    track_id: str,
+    request: "track_schemas.PatchTrackRequest",
+    db: Session = Depends(database.get_db),
+    user_id: UUID = Depends(auth.get_current_user_id),
+) -> "track_schemas.TrackResponse":
+    """
+    Update a track's title and/or MIDI channel.
+    Both fields are optional - only provided fields will be updated.
+    """
+    track = track_utils.get_track_for_user(db, user_id, track_id)
+
+    if not track:
+        raise HTTPException(status_code=404)
+    # Update fields if provided
+    if request.title is not None:
+        track.title = request.title
+
+    if request.midi_channel is not None:
+        track.midi_channel = request.midi_channel
+
+    db.commit()
+    db.refresh(track)
+
+    return track.to_response()
