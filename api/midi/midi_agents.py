@@ -104,12 +104,15 @@ async def generate_midi(model_name: "ModelName", expect_measures: int, chat_hist
     user_msg = chat_history[-1].content
     chat_history[-1].content = f"{user_msg}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
 
+    # Get provider from the map (returns tuple of (provider, model_name))
+    provider, _ = MODEL_PROVIDER_MAP[model_name]
+
     model = init_chat_model(
         model_name,
-        model_provider=MODEL_PROVIDER_MAP[model_name],
+        model_provider=provider,
     ).with_structured_output(GenerateMidiResponse)
 
-    return model.ainvoke(chat_history)
+    return await model.ainvoke(chat_history)
 
 
 class _GenerateMidi(weave.Model):
@@ -148,6 +151,11 @@ class _GenerateMidi(weave.Model):
 
         # Invoke model with structured output
         response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
+
+        if response is None:
+            log.error("Model returned None response")
+            raise HTTPException(status_code=500, detail="Model failed to generate a response")
+
         midi_events: list[MidiEvent] = response.to_midi_events()
 
         # Evaluate the response
