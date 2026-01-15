@@ -3,10 +3,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from api import auth, database
-from api.loops import loop_models, loop_schemas
+from api.loops import loop_models, loop_schemas, loop_utils
 from api.midi import midi_agents
 from api.songs import song_models
 from api.tracks import track_models
@@ -55,26 +55,20 @@ async def create_loop(
 
 
 @router.get("/loops/{loop_id}", response_model=loop_schemas.LoopDetailResponse)
-async def get_loop(loop_id: str, db: Session = Depends(database.get_db)) -> loop_schemas.LoopDetailResponse:
+async def get_loop(
+    loop_id: str,
+    db: Session = Depends(database.get_db),
+    user_id: UUID = Depends(auth.get_current_user_id),
+) -> loop_schemas.LoopDetailResponse:
     """
     Get a specific loop with all chat messages.
     """
-    try:
-        loop = (
-            db.query(loop_models.MidiLoop)
-            .options(joinedload(loop_models.MidiLoop.chat_messages))
-            .filter(loop_models.MidiLoop.id == loop_id)
-            .first()
-        )
-        if not loop:
-            raise HTTPException(status_code=404)
+    loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
-        return loop.to_detail_response()
+    if not loop:
+        raise HTTPException(status_code=404)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500) from e
+    return loop.to_detail_response()
 
 
 @router.delete("/loops/{loop_id}", status_code=204)
@@ -88,27 +82,57 @@ async def delete_loop(
 
     The chat messages are automatically deleted via cascade relationship.
     """
-    try:
-        # Validate that the loop exists and belongs to a track owned by the user
-        loop: loop_models.MidiLoop | None = (
-            db.query(loop_models.MidiLoop)
-            .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
+    loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
+
+    if not loop:
+        raise HTTPException(status_code=404, detail="Loop not found")
+
+    # Delete the loop (chat messages are cascade deleted)
+    db.delete(loop)
+    db.commit()
+
+
+@router.patch("/loops/{loop_id}", response_model=loop_schemas.LoopResponse)
+async def update_loop(
+    loop_id: str,
+    request: loop_schemas.PatchLoopRequest,
+    db: Session = Depends(database.get_db),
+    user_id: UUID = Depends(auth.get_current_user_id),
+) -> loop_schemas.LoopResponse:
+    """
+    Update a loop's offset, repeat, or track_id.
+    All fields are optional - only provided fields will be updated.
+    """
+    loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
+
+    if not loop:
+        raise HTTPException(status_code=404)
+
+    # Update fields if provided
+    if request.offset is not None:
+        loop.offset = request.offset
+
+    if request.repeat is not None:
+        loop.repeat = request.repeat
+
+    if request.track_id is not None:
+        # Validate that the new track exists and belongs to a song owned by the user
+        track = (
+            db.query(track_models.MidiTrack)
             .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-            .filter(loop_models.MidiLoop.id == loop_id, song_models.MidiSong.user_id == str(user_id))
+            .filter(track_models.MidiTrack.id == request.track_id, song_models.MidiSong.user_id == str(user_id))
             .first()
         )
 
-        if not loop:
-            raise HTTPException(status_code=404, detail="Loop not found")
+        if not track:
+            raise HTTPException(status_code=404, detail="Track not found")
 
-        # Delete the loop (chat messages are cascade deleted)
-        db.delete(loop)
-        db.commit()
+        loop.track_id = request.track_id
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete loop: {str(e)}") from e
+    db.commit()
+    db.refresh(loop)
+
+    return loop.to_response()
 
 
 @router.post("/loops/{loop_id}/chats", response_model=loop_schemas.LoopDetailResponse)
@@ -118,31 +142,18 @@ async def append_chat(
     user_id: UUID = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopDetailResponse:
     """Create a new user chat message for a loop."""
-    try:
-        # Validate that the loop exists and belongs to a track owned by the user
-        loop: loop_models.MidiLoop | None = (
-            db.query(loop_models.MidiLoop)
-            .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
-            .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-            .filter(loop_models.MidiLoop.id == request.loop_id, song_models.MidiSong.user_id == str(user_id))
-            .first()
-        )
+    loop = loop_utils.get_loop_for_user(db, user_id, request.loop_id)
 
-        if not loop:
-            raise HTTPException(status_code=404)
+    if not loop:
+        raise HTTPException(status_code=404)
 
-        agent = midi_agents.get_agent()
-        loop: loop_models.MidiLoop = await agent.invoke(
-            user_id=user_id,
-            track_id=loop.track_id,
-            loop_id=loop.id,
-            user_prompt=request.msg,
-            expect_measures=request.measures,
-        )
+    agent = midi_agents.get_agent()
+    loop: loop_models.MidiLoop = await agent.invoke(
+        user_id=user_id,
+        track_id=loop.track_id,
+        loop_id=loop.id,
+        user_prompt=request.msg,
+        expect_measures=request.measures,
+    )
 
-        return loop.to_detail_response()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create chat message: {str(e)}") from e
+    return loop.to_detail_response()

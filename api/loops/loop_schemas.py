@@ -64,3 +64,13 @@ class AppendChatRequest(pydantic.BaseModel):
     loop_id: str = pydantic.Field(description="ID of the loop to add the chat message to")
     msg: str = pydantic.Field(min_length=1, description="User message content")
     measures: int = pydantic.Field(ge=1, le=32, description="Number of measures in the loop (1-32)")
+
+
+class PatchLoopRequest(pydantic.BaseModel):
+    """Request model for updating a loop."""
+
+    offset: int | None = pydantic.Field(None, ge=0, description="Position offset in measures (optional)")
+    repeat: int | None = pydantic.Field(None, gt=0, description="Number of times to repeat (optional)")
+    track_id: str | None = pydantic.Field(None, description="ID of the parent track (optional)")
+
+    model_config = ConfigDict(from_attributes=True)

@@ -1,5 +1,13 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
-import * as Tone from "tone";
+
+// Dynamic import to avoid initializing AudioContext on page load
+let Tone: typeof import("tone") | null = null;
+async function getTone() {
+  if (!Tone) {
+    Tone = await import("tone");
+  }
+  return Tone;
+}
 
 interface MidiEvent {
   measure: number;
@@ -13,6 +21,7 @@ interface MidiEvent {
 
 interface Loop {
   id: string;
+  offset: number;
   measures: number;
   repeat: number;
   midi_events: MidiEvent[];
@@ -28,7 +37,7 @@ interface Track {
 interface SongData {
   tracks: Track[];
   bpm: number;
-  time_signature?: string;
+  time_signature: string;
 }
 
 interface MidiOutput {
@@ -61,30 +70,31 @@ const BROWSER_AUDIO_OUTPUT: MidiOutput = {
   type: "browser",
 };
 
-// Scheduled event with absolute timestamp
-interface ScheduledEvent {
-  timestamp: number; // in seconds
-  channel: number;
-  note: number;
-  velocity: number;
-  trackId: string;
-}
-
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpmState] = useState(120);
   const [songData, setSongData] = useState<SongData | null>(null);
-  const synthsRef = useRef<Map<number, Tone.PolySynth>>(new Map());
+  const synthsRef = useRef<Map<number, any>>(new Map());
   const [midiOutputs, setMidiOutputs] = useState<MidiOutput[]>([BROWSER_AUDIO_OUTPUT]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState<MidiOutput>(BROWSER_AUDIO_OUTPUT);
   const [hasMidiAccess, setHasMidiAccess] = useState(false);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
+  const audioContextStartedRef = useRef<boolean>(false);
 
   // Playback state
-  const playbackStartTimeRef = useRef<number>(0);
-  const scheduledEventsRef = useRef<ScheduledEvent[]>([]);
-  const eventIndexRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
+  const currentBeatRef = useRef<number>(-1);
+  const isPlayingRef = useRef<boolean>(false);
+  const bpmRef = useRef<number>(bpm);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    bpmRef.current = bpm;
+  }, [bpm]);
 
   // Get beats per measure from time signature string (e.g., "4/4" -> 4, "3/4" -> 3, "6/8" -> 6)
   const getBeatsPerMeasure = (timeSignature?: string): number => {
@@ -93,145 +103,134 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return numerator || 4;
   };
 
-  // Convert MIDI event timing to absolute timestamp in seconds
-  const midiEventToSeconds = (
-    event: MidiEvent,
-    measureOffset: number,
-    currentBpm: number,
-    timeSignature?: string
-  ): number => {
-    const { measure, beat, beat_div4, beat_div16 } = event;
+  /**
+   * Send MIDI events to the selected MIDI output.
+   * @param channel - The MIDI channel to send the events to.
+   * @param events - The MIDI events to send.
+   */
+  const sendMidiEvents = useCallback(
+    async (channel: number, events: MidiEvent[]) => {
+      if (selectedMidiOutput.type === "browser") {
+        // Don't send events if audio context hasn't been started yet
+        if (!audioContextStartedRef.current || !Tone) return;
 
-    // Calculate absolute measure position including offset
-    const absoluteMeasure = measure + measureOffset;
+        const synth = synthsRef.current.get(channel);
+        if (!synth) return;
 
-    // Calculate total beats from start
-    const beatsPerMeasure = getBeatsPerMeasure(timeSignature);
-    const totalBeats = absoluteMeasure * beatsPerMeasure + beat;
+        const now = Tone!.now();
+        events.forEach((event) => {
+          const note = Tone!.Frequency(event.event).toFrequency();
 
-    // Add subdivisions
-    // beat_div4 ranges 0-3, beat_div16 ranges 0-3, giving 16 subdivisions per beat
-    const subdivision = (beat_div4 * 4 + beat_div16) / 16; // Convert to fraction of a beat
-    const totalBeatsWithSubdivision = totalBeats + subdivision;
-
-    // Convert beats to seconds: (beats / bpm) * 60
-    const seconds = (totalBeatsWithSubdivision / currentBpm) * 60;
-
-    return seconds;
-  };
-
-  // Build sorted list of all events with absolute timestamps
-  const buildEventSchedule = useCallback((songData: SongData, currentBpm: number): ScheduledEvent[] => {
-    const events: ScheduledEvent[] = [];
-
-    songData.tracks.forEach((track) => {
-      let trackOffsetMeasures = 0;
-
-      track.loops.forEach((loop) => {
-        // Schedule events for each repeat of the loop
-        for (let repeat = 0; repeat < loop.repeat; repeat++) {
-          const loopOffsetMeasures = trackOffsetMeasures + (repeat * loop.measures);
-
-          loop.midi_events.forEach((event) => {
-            if (event.event === "note_on") {
-              const timestamp = midiEventToSeconds(
-                event,
-                loopOffsetMeasures,
-                currentBpm,
-                songData.time_signature
-              );
-
-              events.push({
-                timestamp,
-                channel: track.midi_channel,
-                note: event.value,
-                velocity: 100, // Default velocity
-                trackId: track.id,
-              });
+          if (typeof note === "number" && Number.isFinite(note)) {
+            if (event.value > 0) {
+              synth.triggerAttack(note, now, event.value / 100);
+            } else {
+              synth.triggerRelease(note, now);
             }
-          });
-        }
+          }
+        });
+      } else {
+        // Send to real MIDI device
+        const midiAccess = midiAccessRef.current;
+        if (!midiAccess) return;
 
-        // Update offset for next loop (all repeats of current loop)
-        trackOffsetMeasures += loop.measures * loop.repeat;
-      });
-    });
+        // Get Tone for frequency conversion
+        const tone = await getTone();
 
-    // Sort by timestamp
-    events.sort((a, b) => a.timestamp - b.timestamp);
-
-    console.log(`Built schedule with ${events.length} MIDI events`);
-    return events;
-  }, []);
-
-  // Generic MIDI send function
-  const sendMidiNote = useCallback((channel: number, note: number, velocity: number) => {
-    if (selectedMidiOutput.type === "browser") {
-      // Use Tone.js for browser audio
-      const synth = synthsRef.current.get(channel);
-      if (synth) {
-        const freq = Tone.Frequency(note, "midi").toFrequency();
-        synth.triggerAttackRelease(freq, "8n");
+        // Find the matching MIDI output
+        midiAccess.outputs.forEach((output) => {
+          const outputId = output.id || output.name || "unknown";
+          if (outputId === selectedMidiOutput.id) {
+            events.forEach((event) => {
+              const note = tone.Frequency(event.event).toMidi();
+              const velocity = Math.floor(event.value * 1.27);
+              output.send([0x90 + (channel - 1), note, velocity]);
+            });
+          }
+        });
       }
-    } else {
-      // Send to real MIDI device
-      const midiAccess = midiAccessRef.current;
-      if (!midiAccess) return;
-
-      // Find the matching MIDI output
-      midiAccess.outputs.forEach((output) => {
-        const outputId = output.id || output.name || "unknown";
-        if (outputId === selectedMidiOutput.id) {
-          // MIDI note on message: [status, note, velocity]
-          // Status byte: 0x90 + channel (0-15)
-          const noteOnStatus = 0x90 + (channel - 1); // Convert 1-indexed to 0-indexed
-          output.send([noteOnStatus, note, velocity]);
-
-          // Schedule note off after a short duration (8th note approximation)
-          const noteDurationMs = (60 / bpm) * 1000 / 2; // 8th note duration
-          setTimeout(() => {
-            const noteOffStatus = 0x80 + (channel - 1);
-            output.send([noteOffStatus, note, 0]);
-          }, noteDurationMs);
-        }
-      });
-    }
-  }, [selectedMidiOutput, bpm]);
+    },
+    [selectedMidiOutput]
+  );
 
   // Playback loop using requestAnimationFrame
   const playbackLoop = useCallback(() => {
-    if (!isPlaying) return;
+    if (!isPlayingRef.current || !songData) return;
 
-    const currentTime = performance.now();
-    const elapsedSeconds = (currentTime - playbackStartTimeRef.current) / 1000;
+    // Capture songData in closure so TypeScript knows it's not null
+    const currentSongData = songData;
+    const beatsPerMeasure = getBeatsPerMeasure(currentSongData.time_signature);
 
-    // Process all events up to current elapsed time
-    const events = scheduledEventsRef.current;
-    let currentIndex = eventIndexRef.current;
+    let prevTimeMs = performance.now();
 
-    while (currentIndex < events.length && events[currentIndex].timestamp <= elapsedSeconds) {
-      const event = events[currentIndex];
-      sendMidiNote(event.channel, event.note, event.velocity);
-      currentIndex++;
+    function frame() {
+      // Stop if playback was paused/stopped or songData is gone
+      // Use ref to check current value, not stale closure value
+      if (!isPlayingRef.current || !currentSongData) {
+        animationFrameRef.current = null;
+        return;
+      }
+
+      const curTimeMs = performance.now();
+
+      // Recalculate each frame in case the BPM has changed
+      // Use ref to get current BPM value, not stale closure value
+      const beatsPerMs = bpmRef.current / 60 / 1000;
+
+      // How much time has elapsed since the last frame in ms
+      const timeDeltaMs = curTimeMs - prevTimeMs;
+
+      // How many (fractional) beats have elapsed since the last frame
+      const beatDelta = timeDeltaMs * beatsPerMs;
+      const prevBeat = currentBeatRef.current;
+      const curBeat = Math.max(0, prevBeat) + beatDelta;
+      currentBeatRef.current = curBeat;
+
+      // Collect events that should fire in this frame
+      const eventsToSend: Array<{ channel: number; event: MidiEvent }> = [];
+
+      currentSongData.tracks.forEach((track) => {
+        track.loops.forEach((loop) => {
+          const loopStartBeat = loop.offset * beatsPerMeasure;
+          const loopEndBeat = loopStartBeat + loop.measures * beatsPerMeasure * loop.repeat;
+
+          if (curBeat >= loopStartBeat && curBeat < loopEndBeat) {
+            loop.midi_events.forEach((event) => {
+              const eventBeat =
+                loopStartBeat +
+                (event.measure - 1) * beatsPerMeasure +
+                (event.beat - 1) +
+                (event.beat_div4 - 1) / 4 +
+                (event.beat_div16 - 1) / 16;
+              if (eventBeat > prevBeat && eventBeat <= curBeat) {
+                eventsToSend.push({ channel: track.midi_channel, event });
+              }
+            });
+          }
+        });
+      });
+
+      // Send all events (fire and forget - we don't want to block the frame)
+      eventsToSend.forEach(({ channel, event }) => {
+        sendMidiEvents(channel, [event]).catch((error) => {
+          console.error("Error sending MIDI event:", error);
+        });
+      });
+
+      prevTimeMs = curTimeMs;
+
+      const frameId = requestAnimationFrame(frame);
+      animationFrameRef.current = frameId;
     }
 
-    eventIndexRef.current = currentIndex;
+    const frameId = requestAnimationFrame(frame);
+    animationFrameRef.current = frameId;
+  }, [songData, sendMidiEvents]); // Removed isPlaying and bpm - they're checked via refs/closure
 
-    // Continue loop if there are more events
-    if (currentIndex < events.length) {
-      animationFrameRef.current = requestAnimationFrame(playbackLoop);
-    } else {
-      // Playback finished
-      console.log("Playback finished");
-      setIsPlaying(false);
-    }
-  }, [isPlaying, sendMidiNote]);
-
-  // Start/continue playback loop when isPlaying changes
+  // Start/stop playback loop when isPlaying changes
   useEffect(() => {
     if (isPlaying) {
-      playbackStartTimeRef.current = performance.now();
-      animationFrameRef.current = requestAnimationFrame(playbackLoop);
+      playbackLoop();
     } else {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -242,41 +241,33 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
   }, [isPlaying, playbackLoop]);
 
-  // Rebuild event schedule when song data or BPM changes
-  useEffect(() => {
-    if (!songData) {
-      scheduledEventsRef.current = [];
+  // Helper function to ensure synths are created for browser audio
+  const ensureSynthsCreated = useCallback(async () => {
+    if (!songData || selectedMidiOutput.type !== "browser" || !audioContextStartedRef.current || !Tone) {
       return;
     }
 
-    // Build the event schedule
-    const events = buildEventSchedule(songData, bpm);
-    scheduledEventsRef.current = events;
-    eventIndexRef.current = 0;
-
-    // Create synths for browser audio output if needed
-    if (selectedMidiOutput.type === "browser") {
-      songData.tracks.forEach((track) => {
-        if (!synthsRef.current.has(track.midi_channel)) {
-          const synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: "triangle" },
-            envelope: {
-              attack: 0.005,
-              decay: 0.1,
-              sustain: 0.3,
-              release: 1,
-            },
-          }).toDestination();
-          synthsRef.current.set(track.midi_channel, synth);
-          console.log(`Created synth for MIDI channel ${track.midi_channel}`);
-        }
-      });
-    }
-  }, [songData, bpm, selectedMidiOutput, buildEventSchedule]);
+    songData.tracks.forEach((track) => {
+      if (!synthsRef.current.has(track.midi_channel)) {
+        const synth = new Tone!.PolySynth(Tone!.Synth, {
+          oscillator: { type: "triangle" },
+          envelope: {
+            attack: 0.005,
+            decay: 0.1,
+            sustain: 0.3,
+            release: 5,
+          },
+        }).toDestination();
+        synthsRef.current.set(track.midi_channel, synth);
+        console.log(`Created synth for MIDI channel ${track.midi_channel}`);
+      }
+    });
+  }, [songData, selectedMidiOutput]);
 
   // Scan for MIDI devices when MIDI access is granted
   const scanMidiDevices = useCallback((midiAccess: MIDIAccess) => {
@@ -322,7 +313,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // Check if MIDI access was previously granted on mount
   useEffect(() => {
     if (navigator.requestMIDIAccess) {
-      navigator.requestMIDIAccess()
+      navigator
+        .requestMIDIAccess()
         .then((midiAccess) => {
           midiAccessRef.current = midiAccess;
           setHasMidiAccess(true);
@@ -340,12 +332,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const play = async () => {
     // Start the audio context if using browser audio
-    if (selectedMidiOutput.type === "browser" && Tone.context.state !== "running") {
-      await Tone.start();
+    // Note: Tone.start() is idempotent and safe to call multiple times
+    if (selectedMidiOutput.type === "browser") {
+      const tone = await getTone();
+      await tone.start();
+      audioContextStartedRef.current = true;
     }
 
+    // Create synths after audio context is started (requires user gesture)
+    await ensureSynthsCreated();
+
     // Reset to beginning
-    eventIndexRef.current = 0;
+    currentBeatRef.current = -1; // -1 to make sure we don't skip the first beat
     setIsPlaying(true);
   };
 
@@ -355,7 +353,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const stop = () => {
     setIsPlaying(false);
-    eventIndexRef.current = 0;
+    currentBeatRef.current = -1;
   };
 
   const togglePlayPause = async () => {
@@ -368,27 +366,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const setBpm = (newBpm: number) => {
     setBpmState(newBpm);
-    // Rebuild schedule with new BPM if song is loaded
-    if (songData) {
-      const events = buildEventSchedule(songData, newBpm);
-      scheduledEventsRef.current = events;
-      eventIndexRef.current = 0;
-    }
   };
 
-  const loadSong = useCallback((newSongData: SongData | null) => {
-    // Stop playback when loading new song
-    if (isPlaying) {
-      setIsPlaying(false);
-    }
-    eventIndexRef.current = 0;
-    setSongData(newSongData);
+  const loadSong = useCallback(
+    (newSongData: SongData | null) => {
+      // Stop playback only if song data is cleared
+      if (!newSongData && isPlaying) {
+        setIsPlaying(false);
+      }
+      currentBeatRef.current = -1;
+      setSongData(newSongData);
 
-    // Update BPM from song data if provided
-    if (newSongData) {
-      setBpmState(newSongData.bpm);
-    }
-  }, [isPlaying]);
+      // Update BPM from song data if provided
+      if (newSongData) {
+        setBpmState(newSongData.bpm);
+      }
+    },
+    [isPlaying]
+  );
 
   return (
     <PlaybackContext.Provider

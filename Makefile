@@ -17,6 +17,7 @@ up:
 fmt:
 	uv run ruff format .
 	uv run ruff check --fix .
+	cd app && npm run format
 
 lint:
 	uv run ruff format --check .

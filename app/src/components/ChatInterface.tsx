@@ -38,7 +38,18 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
-import { listSongs, createSong, getSong, createLoop, appendLoopChat, getLoop, deleteLoop, createTrack, deleteTrack, updateTrack } from "../lib/api";
+import {
+  listSongs,
+  createSong,
+  getSong,
+  createLoop,
+  appendLoopChat,
+  getLoop,
+  deleteLoop,
+  createTrack,
+  deleteTrack,
+  updateTrack,
+} from "../lib/api";
 import { usePlayback } from "../contexts/PlaybackContext";
 import type { components } from "../types/api";
 
@@ -167,6 +178,7 @@ export default function ChatInterface() {
           midi_channel: track.midi_channel,
           loops: (track.loops || []).map((loop) => ({
             id: loop.id,
+            offset: loop.offset,
             measures: loop.measures,
             repeat: loop.repeat,
             midi_events: loop.midi_events as any, // API returns MidiEvent[] but typed as { [key: string]: unknown; }[]
@@ -464,7 +476,11 @@ export default function ChatInterface() {
       return;
     }
 
-    if (!confirm("Are you sure you want to delete this track? This will also delete all loops in this track. This action cannot be undone.")) {
+    if (
+      !confirm(
+        "Are you sure you want to delete this track? This will also delete all loops in this track. This action cannot be undone."
+      )
+    ) {
       return;
     }
 
@@ -570,12 +586,7 @@ export default function ChatInterface() {
             <Typography variant="h6" component="div">
               Songs
             </Typography>
-            <IconButton
-              edge="end"
-              onClick={toggleDrawer(false)}
-              aria-label="close drawer"
-              size="small"
-            >
+            <IconButton edge="end" onClick={toggleDrawer(false)} aria-label="close drawer" size="small">
               <CloseIcon />
             </IconButton>
           </Box>
@@ -615,14 +626,8 @@ export default function ChatInterface() {
                 .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
                 .map((song) => (
                   <ListItem key={song.id} disablePadding>
-                    <ListItemButton
-                      selected={selectedSongId === song.id}
-                      onClick={() => handleSelectSong(song.id)}
-                    >
-                      <ListItemText
-                        primary={song.title}
-                        secondary={`${song.key} • ${song.bpm} BPM`}
-                      />
+                    <ListItemButton selected={selectedSongId === song.id} onClick={() => handleSelectSong(song.id)}>
+                      <ListItemText primary={song.title} secondary={`${song.key} • ${song.bpm} BPM`} />
                     </ListItemButton>
                   </ListItem>
                 ))
@@ -634,13 +639,7 @@ export default function ChatInterface() {
       {/* Full-width navbar */}
       <AppBar position="static" elevation={1}>
         <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            aria-label="menu"
-            onClick={toggleDrawer(true)}
-            sx={{ mr: 2 }}
-          >
+          <IconButton edge="start" color="inherit" aria-label="menu" onClick={toggleDrawer(true)} sx={{ mr: 2 }}>
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
@@ -673,9 +672,7 @@ export default function ChatInterface() {
                   {output.name}
                 </MenuItem>
               ))}
-              {!hasMidiAccess && (
-                <MenuItem value="request-midi">Allow MIDI Access</MenuItem>
-              )}
+              {!hasMidiAccess && <MenuItem value="request-midi">Allow MIDI Access</MenuItem>}
             </Select>
           </FormControl>
         </Toolbar>
@@ -706,103 +703,136 @@ export default function ChatInterface() {
               minHeight: "100%",
             }}
           >
-              <Stack spacing={2} sx={{ pl: 2, pt: 6 }}>
-                {/* Track label cards */}
-                {songDetail.tracks?.map((track) => (
-                  <Card
-                    key={track.id}
-                    sx={{
-                      width: 140,
-                      height: 140,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      "&:hover": {
-                        bgcolor: "action.hover",
-                        boxShadow: 2,
-                      },
-                    }}
-                    onClick={() => handleOpenTrackModal(track)}
-                  >
-                    <CardContent sx={{ textAlign: "center", p: 2 }}>
-                      <Typography variant="h6" gutterBottom>
-                        {track.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Channel {track.midi_channel}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Create Track card */}
+            <Stack spacing={2} sx={{ pl: 2, pt: 6 }}>
+              {/* Track label cards */}
+              {songDetail.tracks?.map((track) => (
                 <Card
+                  key={track.id}
                   sx={{
                     width: 140,
                     height: 140,
-                    border: "2px dashed",
-                    borderColor: "divider",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     "&:hover": {
-                      borderColor: "primary.main",
                       bgcolor: "action.hover",
+                      boxShadow: 2,
                     },
                   }}
-                  onClick={handleCreateTrack}
+                  onClick={() => handleOpenTrackModal(track)}
                 >
                   <CardContent sx={{ textAlign: "center", p: 2 }}>
-                    <Stack alignItems="center" spacing={1}>
-                      {isCreatingTrack ? (
-                        <CircularProgress size={24} />
-                      ) : (
-                        <>
-                          <AddIcon color="action" />
-                          <Typography variant="body2" color="text.secondary">
-                            Create Track
-                          </Typography>
-                        </>
-                      )}
-                    </Stack>
+                    <Typography variant="h6" gutterBottom>
+                      {track.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Channel {track.midi_channel}
+                    </Typography>
                   </CardContent>
                 </Card>
-              </Stack>
-            </Box>
+              ))}
 
-            {/* Right scrollable area: Sequencer Grid */}
-            <Box sx={{ flex: 1, px: { xs: 2, sm: 3, md: 4, lg: 6 }, py: 2, overflowX: "auto", overflowY: "auto" }}>
-              {(() => {
-                // Calculate total measures needed for the grid
-                const MEASURE_WIDTH = 80; // pixels per measure
-                let totalMeasures = 8; // Minimum grid size
+              {/* Create Track card */}
+              <Card
+                sx={{
+                  width: 140,
+                  height: 140,
+                  border: "2px dashed",
+                  borderColor: "divider",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  "&:hover": {
+                    borderColor: "primary.main",
+                    bgcolor: "action.hover",
+                  },
+                }}
+                onClick={handleCreateTrack}
+              >
+                <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <Stack alignItems="center" spacing={1}>
+                    {isCreatingTrack ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      <>
+                        <AddIcon color="action" />
+                        <Typography variant="body2" color="text.secondary">
+                          Create Track
+                        </Typography>
+                      </>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
+            </Stack>
+          </Box>
 
-                songDetail.tracks?.forEach((track) => {
-                  track.loops?.forEach((loop) => {
-                    const loopEnd = (loop.offset || 0) + loop.measures;
-                    if (loopEnd > totalMeasures) {
-                      totalMeasures = loopEnd;
-                    }
-                  });
+          {/* Right scrollable area: Sequencer Grid */}
+          <Box sx={{ flex: 1, px: { xs: 2, sm: 3, md: 4, lg: 6 }, py: 2, overflowX: "auto", overflowY: "auto" }}>
+            {(() => {
+              // Calculate total measures needed for the grid
+              const MEASURE_WIDTH = 80; // pixels per measure
+              let totalMeasures = 8; // Minimum grid size
+
+              songDetail.tracks?.forEach((track) => {
+                track.loops?.forEach((loop) => {
+                  const loopEnd = (loop.offset || 0) + loop.measures;
+                  if (loopEnd > totalMeasures) {
+                    totalMeasures = loopEnd;
+                  }
                 });
+              });
 
-                // Add some extra measures for breathing room
-                totalMeasures += 4;
+              // Add some extra measures for breathing room
+              totalMeasures += 4;
 
-                return (
-                  <Stack spacing={0}>
-                    {/* Measure Ruler */}
+              return (
+                <Stack spacing={0}>
+                  {/* Measure Ruler */}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      height: 32,
+                      borderBottom: 2,
+                      borderColor: "divider",
+                      mb: 2,
+                    }}
+                  >
+                    {Array.from({ length: totalMeasures }, (_, i) => (
+                      <Box
+                        key={i}
+                        sx={{
+                          width: MEASURE_WIDTH,
+                          flexShrink: 0,
+                          borderRight: 1,
+                          borderColor: "divider",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: "bold",
+                          color: "text.secondary",
+                          fontSize: "0.875rem",
+                        }}
+                      >
+                        {i + 1}
+                      </Box>
+                    ))}
+                  </Box>
+
+                  {/* Track Grid Rows */}
+                  {songDetail.tracks?.map((track) => (
                     <Box
+                      key={track.id}
                       sx={{
+                        position: "relative",
+                        height: 140 + 16, // Card height + spacing
                         display: "flex",
-                        height: 32,
-                        borderBottom: 2,
-                        borderColor: "divider",
                         mb: 2,
                       }}
                     >
+                      {/* Grid background with measure markers */}
                       {Array.from({ length: totalMeasures }, (_, i) => (
                         <Box
                           key={i}
@@ -811,131 +841,98 @@ export default function ChatInterface() {
                             flexShrink: 0,
                             borderRight: 1,
                             borderColor: "divider",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontWeight: "bold",
-                            color: "text.secondary",
-                            fontSize: "0.875rem",
+                            bgcolor: i % 4 === 0 ? "action.hover" : "transparent",
                           }}
-                        >
-                          {i + 1}
-                        </Box>
+                        />
                       ))}
-                    </Box>
 
-                    {/* Track Grid Rows */}
-                    {songDetail.tracks?.map((track) => (
-                      <Box
-                        key={track.id}
-                        sx={{
-                          position: "relative",
-                          height: 140 + 16, // Card height + spacing
-                          display: "flex",
-                          mb: 2,
-                        }}
-                      >
-                        {/* Grid background with measure markers */}
-                        {Array.from({ length: totalMeasures }, (_, i) => (
-                          <Box
-                            key={i}
+                      {/* Positioned loops */}
+                      {track.loops?.map((loop, index) => {
+                        const offset = loop.offset || 0;
+                        const width = loop.measures * MEASURE_WIDTH;
+                        const left = offset * MEASURE_WIDTH;
+
+                        return (
+                          <Card
+                            key={loop.id}
                             sx={{
-                              width: MEASURE_WIDTH,
-                              flexShrink: 0,
-                              borderRight: 1,
-                              borderColor: "divider",
-                              bgcolor: i % 4 === 0 ? "action.hover" : "transparent",
+                              position: "absolute",
+                              left: `${left}px`,
+                              width: `${width}px`,
+                              height: 140,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              "&:hover": {
+                                bgcolor: "action.hover",
+                                boxShadow: 2,
+                              },
                             }}
-                          />
-                        ))}
+                            onClick={() => handleOpenEditLoopModal(loop)}
+                          >
+                            <CardContent sx={{ textAlign: "center", p: 2 }}>
+                              <Typography variant="subtitle2" gutterBottom>
+                                Loop {index + 1}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {loop.measures} measures • {loop.midi_events.length} events
+                              </Typography>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
 
-                        {/* Positioned loops */}
-                        {track.loops?.map((loop, index) => {
-                          const offset = loop.offset || 0;
-                          const width = loop.measures * MEASURE_WIDTH;
-                          const left = offset * MEASURE_WIDTH;
+                      {/* Create loop button at the end of existing loops */}
+                      {(() => {
+                        // Find the rightmost position
+                        let rightmostPosition = 0;
+                        track.loops?.forEach((loop) => {
+                          const loopEnd = (loop.offset || 0) + loop.measures;
+                          if (loopEnd > rightmostPosition) {
+                            rightmostPosition = loopEnd;
+                          }
+                        });
 
-                          return (
-                            <Card
-                              key={loop.id}
-                              sx={{
-                                position: "absolute",
-                                left: `${left}px`,
-                                width: `${width}px`,
-                                height: 140,
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                "&:hover": {
-                                  bgcolor: "action.hover",
-                                  boxShadow: 2,
-                                },
-                              }}
-                              onClick={() => handleOpenEditLoopModal(loop)}
-                            >
-                              <CardContent sx={{ textAlign: "center", p: 2 }}>
-                                <Typography variant="subtitle2" gutterBottom>
-                                  Loop {index + 1}
-                                </Typography>
+                        return (
+                          <Card
+                            sx={{
+                              position: "absolute",
+                              left: `${rightmostPosition * MEASURE_WIDTH}px`,
+                              width: MEASURE_WIDTH,
+                              height: 140,
+                              border: "2px dashed",
+                              borderColor: "divider",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              "&:hover": {
+                                borderColor: "primary.main",
+                                bgcolor: "action.hover",
+                              },
+                            }}
+                            onClick={() => handleOpenCreateLoopModal(track.id)}
+                          >
+                            <CardContent sx={{ textAlign: "center", p: 1 }}>
+                              <Stack alignItems="center" spacing={0.5}>
+                                <AddIcon color="action" fontSize="small" />
                                 <Typography variant="caption" color="text.secondary">
-                                  {loop.measures} measures • {loop.midi_events.length} events
+                                  Loop
                                 </Typography>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-
-                        {/* Create loop button at the end of existing loops */}
-                        {(() => {
-                          // Find the rightmost position
-                          let rightmostPosition = 0;
-                          track.loops?.forEach((loop) => {
-                            const loopEnd = (loop.offset || 0) + loop.measures;
-                            if (loopEnd > rightmostPosition) {
-                              rightmostPosition = loopEnd;
-                            }
-                          });
-
-                          return (
-                            <Card
-                              sx={{
-                                position: "absolute",
-                                left: `${rightmostPosition * MEASURE_WIDTH}px`,
-                                width: MEASURE_WIDTH,
-                                height: 140,
-                                border: "2px dashed",
-                                borderColor: "divider",
-                                cursor: "pointer",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                "&:hover": {
-                                  borderColor: "primary.main",
-                                  bgcolor: "action.hover",
-                                },
-                              }}
-                              onClick={() => handleOpenCreateLoopModal(track.id)}
-                            >
-                              <CardContent sx={{ textAlign: "center", p: 1 }}>
-                                <Stack alignItems="center" spacing={0.5}>
-                                  <AddIcon color="action" fontSize="small" />
-                                  <Typography variant="caption" color="text.secondary">
-                                    Loop
-                                  </Typography>
-                                </Stack>
-                              </CardContent>
-                            </Card>
-                          );
-                        })()}
-                      </Box>
-                    ))}
-                  </Stack>
-                );
-              })()}
-            </Box>
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                        );
+                      })()}
+                    </Box>
+                  ))}
+                </Stack>
+              );
+            })()}
           </Box>
-        )}
+        </Box>
+      )}
 
       {/* New Song Modal */}
       <Modal
@@ -967,21 +964,11 @@ export default function ChatInterface() {
           </Typography>
           <Stack direction="row" spacing={2}>
             {songs.length > 0 && (
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={() => setShowNewSongModal(false)}
-                disabled={isCreatingSong}
-              >
+              <Button variant="outlined" fullWidth onClick={() => setShowNewSongModal(false)} disabled={isCreatingSong}>
                 Cancel
               </Button>
             )}
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={handleCreateSong}
-              disabled={isCreatingSong}
-            >
+            <Button variant="contained" fullWidth onClick={handleCreateSong} disabled={isCreatingSong}>
               {isCreatingSong ? <CircularProgress size={24} /> : "Create Song"}
             </Button>
           </Stack>
@@ -1191,7 +1178,13 @@ export default function ChatInterface() {
                     onClick={handleSubmitLoop}
                     disabled={isCreatingLoop || isDeletingLoop || !loopPrompt.trim()}
                   >
-                    {isCreatingLoop ? <CircularProgress size={24} /> : loopModalMode === "create" ? "Create Loop" : "Send"}
+                    {isCreatingLoop ? (
+                      <CircularProgress size={24} />
+                    ) : loopModalMode === "create" ? (
+                      "Create Loop"
+                    ) : (
+                      "Send"
+                    )}
                   </Button>
                 )}
               </Stack>
