@@ -13,6 +13,7 @@ import weave
 from fastapi import HTTPException
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from weave.flow.scorer import ApplyScorerResult, ApplyScorerSuccess
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
 from api.chats import chat_models
@@ -24,6 +25,8 @@ from api.midi import midi_evals
 if TYPE_CHECKING:
     from api.chats.chat_models import ModelName
     from api.loops.loop_models import MidiLoop
+
+MAX_ATTEMPTS = 3
 
 log = logging.getLogger(__name__)
 
@@ -149,18 +152,25 @@ class _GenerateMidi(weave.Model):
         chat_history = self.load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=GENERATION_PROMPT)
         chat_history.append(HumanMessage(content=user_prompt))
 
-        # Invoke model with structured output
-        response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
+        for n in range(MAX_ATTEMPTS):
+            # Invoke agent and evaluate the response
+            response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
+            score: midi_evals.EvalResult = await call.apply_scorer(midi_evals.evaluate_midi_events).result
 
-        if response is None:
-            log.error("Model returned None response")
-            raise HTTPException(status_code=500, detail="Model failed to generate a response")
+            if score.get("ok"):
+                break  # Exit retry loop on success
+
+            # Update the chat history with the error message and retry
+            msg = f"The generated MIDI events failed validation, please fix and try again: {score.get('error', 'Unknown error')}"
+            chat_history.append(SystemMessage(content=msg))
+            log.error(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {score}")
+
+        # Raise on failure after max attempts
+        if not score.get("ok"):
+            log.error(f"Failed to generate midi after {MAX_ATTEMPTS} attempts: {score}")
+            raise HTTPException(status_code=500, detail="Failed to generate valid MIDI. Please try again.")
 
         midi_events: list[MidiEvent] = response.to_midi_events()
-
-        # Evaluate the response
-        score = await call.apply_scorer(midi_evals.evaluate_num_measures)
-        log.info(f"Score: {score}")
 
         # Save to database: create new loop and chat messages
         loop = self.update_loop(
