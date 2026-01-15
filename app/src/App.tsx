@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { ThemeProvider, CssBaseline, useMediaQuery } from "@mui/material";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import ChatInterface from "./components/ChatInterface";
 import { lightTheme, darkTheme } from "./theme";
 import { PlaybackProvider } from "./contexts/PlaybackContext";
@@ -12,9 +14,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <PlaybackProvider>
-        <ChatInterface />
-      </PlaybackProvider>
+      <DndProvider backend={HTML5Backend}>
+        <PlaybackProvider>
+          <ChatInterface />
+        </PlaybackProvider>
+      </DndProvider>
     </ThemeProvider>
   );
 }

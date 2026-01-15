@@ -8,8 +8,7 @@ from sqlalchemy.orm import Session
 from api import auth, database
 from api.loops import loop_models, loop_schemas, loop_utils
 from api.midi import midi_agents
-from api.songs import song_models
-from api.tracks import track_models
+from api.tracks import track_utils
 
 router = APIRouter(prefix="/api/midi", tags=["loops"])
 
@@ -23,35 +22,23 @@ async def create_loop(
     """
     Create a new MIDI loop.
     """
-    try:
-        # Validate that the track exists and belongs to a song owned by the user
-        track = (
-            db.query(track_models.MidiTrack)
-            .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-            .filter(track_models.MidiTrack.id == request.track_id, song_models.MidiSong.user_id == str(user_id))
-            .first()
-        )
+    track = track_utils.get_track_for_user(db, user_id, request.track_id)
 
-        if not track:
-            raise HTTPException(status_code=404)
+    if not track:
+        raise HTTPException(status_code=404)
 
-        # Create new loop with empty MIDI events
-        new_loop = loop_models.MidiLoop(
-            measures=request.measures,
-            repeat=request.repeat,
-            midi_events=[],
-            track_id=request.track_id,
-        )
-        db.add(new_loop)
-        db.commit()
-        db.refresh(new_loop)
+    # Create new loop with empty MIDI events
+    new_loop = loop_models.MidiLoop(
+        measures=request.measures,
+        repeat=request.repeat,
+        midi_events=[],
+        track_id=request.track_id,
+    )
+    db.add(new_loop)
+    db.commit()
+    db.refresh(new_loop)
 
-        return new_loop.to_detail_response()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to create loop") from e
+    return new_loop.to_detail_response()
 
 
 @router.get("/loops/{loop_id}", response_model=loop_schemas.LoopDetailResponse)
@@ -116,13 +103,7 @@ async def update_loop(
         loop.repeat = request.repeat
 
     if request.track_id is not None:
-        # Validate that the new track exists and belongs to a song owned by the user
-        track = (
-            db.query(track_models.MidiTrack)
-            .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
-            .filter(track_models.MidiTrack.id == request.track_id, song_models.MidiSong.user_id == str(user_id))
-            .first()
-        )
+        track = track_utils.get_track_for_user(db, user_id, request.track_id)
 
         if not track:
             raise HTTPException(status_code=404, detail="Track not found")
@@ -150,7 +131,6 @@ async def append_chat(
     agent = midi_agents.get_agent()
     loop: loop_models.MidiLoop = await agent.invoke(
         user_id=user_id,
-        track_id=loop.track_id,
         loop_id=loop.id,
         user_prompt=request.msg,
         expect_measures=request.measures,

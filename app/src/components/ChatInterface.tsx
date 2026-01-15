@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Box,
   Container,
@@ -46,10 +46,12 @@ import {
   appendLoopChat,
   getLoop,
   deleteLoop,
+  updateLoop,
   createTrack,
   deleteTrack,
   updateTrack,
 } from "../lib/api";
+import { useDrag, useDrop } from "react-dnd";
 import { usePlayback } from "../contexts/PlaybackContext";
 import type { components } from "../types/api";
 
@@ -58,6 +60,17 @@ type SongDetail = components["schemas"]["SongDetailResponse"];
 type Track = components["schemas"]["TrackResponse"];
 type Loop = components["schemas"]["LoopResponse"];
 type LoopDetail = components["schemas"]["LoopDetailResponse"];
+
+// Drag and drop type
+const ITEM_TYPE = "LOOP";
+
+interface DragItem {
+  type: string;
+  loopId: string;
+  trackId: string;
+  currentOffset: number;
+  measures: number;
+}
 type ChatMessage = components["schemas"]["ChatMessageResponse"];
 
 export default function ChatInterface() {
@@ -562,6 +575,30 @@ export default function ChatInterface() {
     }
   };
 
+  // Handle loop drop to update offset
+  const handleLoopDrop = async (loopId: string, newOffset: number) => {
+    try {
+      const result = await updateLoop(loopId, { offset: newOffset });
+
+      if (result.error) {
+        console.error("Failed to update loop offset:", result.error);
+        alert("Failed to move loop. Please try again.");
+        return;
+      }
+
+      // Reload song details to reflect the update
+      if (songDetail && selectedSongId) {
+        const songResult = await getSong(selectedSongId);
+        if (songResult.data) {
+          setSongDetail(songResult.data);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update loop offset:", error);
+      alert("Failed to move loop. Please try again.");
+    }
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       {/* Left Drawer */}
@@ -832,55 +869,95 @@ export default function ChatInterface() {
                         mb: 2,
                       }}
                     >
-                      {/* Grid background with measure markers */}
-                      {Array.from({ length: totalMeasures }, (_, i) => (
-                        <Box
-                          key={i}
-                          sx={{
-                            width: MEASURE_WIDTH,
-                            flexShrink: 0,
-                            borderRight: 1,
-                            borderColor: "divider",
-                            bgcolor: i % 4 === 0 ? "action.hover" : "transparent",
-                          }}
-                        />
-                      ))}
+                      {/* Grid background with measure markers - droppable cells */}
+                      {Array.from({ length: totalMeasures }, (_, measureIndex) => {
+                        const DropCell = () => {
+                          const [{ isOver }, drop] = useDrop(() => ({
+                            accept: ITEM_TYPE,
+                            drop: (item: DragItem) => {
+                              handleLoopDrop(item.loopId, measureIndex);
+                            },
+                            collect: (monitor) => ({
+                              isOver: monitor.isOver(),
+                            }),
+                          }));
 
-                      {/* Positioned loops */}
+                          return (
+                            <Box
+                              ref={drop}
+                              sx={{
+                                width: MEASURE_WIDTH,
+                                flexShrink: 0,
+                                borderRight: 1,
+                                borderColor: "divider",
+                                bgcolor: isOver
+                                  ? "primary.light"
+                                  : measureIndex % 4 === 0
+                                    ? "action.hover"
+                                    : "transparent",
+                                transition: "background-color 0.2s",
+                              }}
+                            />
+                          );
+                        };
+
+                        return <DropCell key={measureIndex} />;
+                      })}
+
+                      {/* Positioned loops - draggable */}
                       {track.loops?.map((loop, index) => {
                         const offset = loop.offset || 0;
                         const width = loop.measures * MEASURE_WIDTH;
                         const left = offset * MEASURE_WIDTH;
 
-                        return (
-                          <Card
-                            key={loop.id}
-                            sx={{
-                              position: "absolute",
-                              left: `${left}px`,
-                              width: `${width}px`,
-                              height: 140,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              "&:hover": {
-                                bgcolor: "action.hover",
-                                boxShadow: 2,
-                              },
-                            }}
-                            onClick={() => handleOpenEditLoopModal(loop)}
-                          >
-                            <CardContent sx={{ textAlign: "center", p: 2 }}>
-                              <Typography variant="subtitle2" gutterBottom>
-                                Loop {index + 1}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {loop.measures} measures • {loop.midi_events.length} events
-                              </Typography>
-                            </CardContent>
-                          </Card>
-                        );
+                        const DraggableLoop = () => {
+                          const [{ isDragging }, drag] = useDrag(() => ({
+                            type: ITEM_TYPE,
+                            item: {
+                              type: ITEM_TYPE,
+                              loopId: loop.id,
+                              trackId: track.id,
+                              currentOffset: offset,
+                              measures: loop.measures,
+                            } as DragItem,
+                            collect: (monitor) => ({
+                              isDragging: monitor.isDragging(),
+                            }),
+                          }));
+
+                          return (
+                            <Card
+                              ref={drag}
+                              sx={{
+                                position: "absolute",
+                                left: `${left}px`,
+                                width: `${width}px`,
+                                height: 140,
+                                cursor: isDragging ? "grabbing" : "grab",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                opacity: isDragging ? 0.5 : 1,
+                                "&:hover": {
+                                  bgcolor: "action.hover",
+                                  boxShadow: 2,
+                                },
+                              }}
+                              onClick={() => handleOpenEditLoopModal(loop)}
+                            >
+                              <CardContent sx={{ textAlign: "center", p: 2 }}>
+                                <Typography variant="subtitle2" gutterBottom>
+                                  Loop {index + 1}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {loop.measures} measures • {loop.midi_events.length} events
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          );
+                        };
+
+                        return <DraggableLoop key={loop.id} />;
                       })}
 
                       {/* Create loop button at the end of existing loops */}
