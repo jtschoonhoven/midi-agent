@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
-import { listSamples } from "../lib/api";
+import { listInstruments } from "../lib/api";
 
 // Dynamic import to avoid initializing AudioContext on page load
 let Tone: typeof import("tone") | null = null;
@@ -85,7 +85,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [hasMidiAccess, setHasMidiAccess] = useState(false);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
   const audioContextStartedRef = useRef<boolean>(false);
-  const [pianoSamples, setPianoSamples] = useState<Record<string, string> | null>(null);
+
+  // Store all instruments and samples from backend
+  type Instrument = {
+    id: string;
+    title: string;
+    type: "piano" | "bass" | "drum";
+    license_type: string;
+    license_uri: string;
+    samples: Array<{ id: string; uri: string; midi_event: string }>;
+  };
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
 
   // Playback state
   const animationFrameRef = useRef<number | null>(null);
@@ -264,11 +274,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Wait for piano samples to be loaded
-    if (!pianoSamples) {
-      console.warn("Piano samples not loaded yet");
+    // Wait for instruments to be loaded
+    if (instruments.length === 0) {
+      console.warn("Instruments not loaded yet");
       return;
     }
+
+    // Find piano instrument
+    const pianoInstrument = instruments.find((inst) => inst.type === "piano");
+    if (!pianoInstrument) {
+      console.error("No piano instrument found");
+      return;
+    }
+
+    // Build sample map from piano instrument samples
+    // Format: { "C3": "http://localhost:8000/public/instruments/piano/C3.wav", ... }
+    const sampleMap: Record<string, string> = {};
+    pianoInstrument.samples.forEach((sample) => {
+      // midi_event is already the note name (e.g., "C3", "A4")
+      // uri is the relative path (e.g., "instruments/piano/C3.wav")
+      sampleMap[sample.midi_event] = `${API_BASE_URL}/${sample.uri}`;
+    });
+
+    console.log(`Piano sampler using ${Object.keys(sampleMap).length} samples`);
 
     const loadPromises: Promise<void>[] = [];
 
@@ -279,8 +307,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!synthsRef.current.has(channel)) {
         const loadPromise = new Promise<void>((resolve, reject) => {
           const sampler = new Tone!.Sampler({
-            urls: pianoSamples,
-            baseUrl: `${API_BASE_URL}/public/instruments/piano/`,
+            urls: sampleMap,
             release: 1,
             onload: () => {
               console.log(`Piano sampler loaded for MIDI channel ${channel}`);
@@ -332,7 +359,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     }
-  }, [songData, selectedMidiOutput, pianoSamples]);
+  }, [songData, selectedMidiOutput, instruments]);
 
   // Scan for MIDI devices when MIDI access is granted
   const scanMidiDevices = useCallback((midiAccess: MIDIAccess) => {
@@ -397,39 +424,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, [scanMidiDevices]);
 
-  // Fetch piano samples on mount
+  // Fetch all instruments and samples on mount
   useEffect(() => {
-    const fetchPianoSamples = async () => {
+    const fetchInstruments = async () => {
       try {
-        const result = await listSamples();
+        const result = await listInstruments();
 
         if (result.data) {
-          // Filter to piano samples only (.wav files in instruments/piano/)
-          const pianoFiles = result.data.public.filter(
-            (path) => path.startsWith("instruments/piano/") && path.endsWith(".wav")
-          );
-
-          // Create sample map: { "C3": "C3.wav", ... }
-          // We'll use baseUrl separately so just store filenames
-          const sampleMap: Record<string, string> = {};
-          pianoFiles.forEach((path) => {
-            // Extract note name and filename (e.g., "instruments/piano/C3.wav" -> "C3")
-            const filename = path.split("/").pop();
-            if (filename) {
-              const noteName = filename.replace(".wav", "");
-              sampleMap[noteName] = filename; // Just the filename, not full path
-            }
-          });
-
-          setPianoSamples(sampleMap);
-          console.log(`Loaded ${Object.keys(sampleMap).length} piano samples`);
+          setInstruments(result.data.instruments);
+          console.log(`Loaded ${result.data.instruments.length} instruments`);
         }
       } catch (error) {
-        console.error("Failed to fetch piano samples:", error);
+        console.error("Failed to fetch instruments:", error);
       }
     };
 
-    fetchPianoSamples();
+    fetchInstruments();
   }, []);
 
   const play = async () => {

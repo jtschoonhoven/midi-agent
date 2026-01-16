@@ -5,31 +5,34 @@ Docs: https://docs.wandb.ai/weave/guides/core-types/models
 
 import logging
 import os
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, Optional, TypedDict, cast
 from uuid import UUID, uuid4
 
 import pydantic
 import weave
 from anthropic import AsyncAnthropic
+from anthropic.types.beta import BetaMessageParam
 from fastapi import HTTPException
 from openai import AsyncOpenAI
+from openai.types.responses import ResponseInputItemParam
 from weave.flow.scorer import ApplyScorerResult
 from weave.trace.call import Call
 from weave.trace.vals import WeaveList
 
-from api.audio.audio_types import Chord, MidiEvent, MidiEventType
+from api.audio.audio_types import Chord
 from api.chats import chat_models
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
+from api.chats.chat_types import ModelName
 from api.database import SessionLocal
 from api.loops import loop_utils
-from api.midi import midi_evals
+from api.midi import midi_evals, midi_models, midi_utils
+from api.midi.midi_types import MidiEventType
 
 if TYPE_CHECKING:
-    from api.chats.chat_models import ModelName
     from api.loops.loop_models import MidiLoop
 
 
-DEFAULT_MODEL_NAME = "claude-haiku-4-5"
+DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
 MAX_ATTEMPTS = 3
 _CLIENT: Optional["_GenerateMidi"] = None
 
@@ -120,7 +123,7 @@ class _GenerateMidi(weave.Model):
         system_prompt: System prompt to guide the model's behavior
     """
 
-    model_name: str
+    model_name: ModelName
     system_prompt: str
 
     @weave.op()
@@ -170,7 +173,7 @@ class _GenerateMidi(weave.Model):
             log.error(f"Failed to generate midi after {MAX_ATTEMPTS} attempts: {score}")
             raise HTTPException(status_code=500, detail="Failed to generate valid MIDI. Please try again.")
 
-        midi_events: list[MidiEvent] = response.to_midi_events()
+        midi_events: list[midi_models.MidiEvent] = response.to_midi_events()
 
         # Save to database: create new loop and chat messages
         loop = self.update_loop(
@@ -189,7 +192,7 @@ class _GenerateMidi(weave.Model):
         loop_id: UUID,
         user_prompt: str,
         agent_description: str,
-        midi_events: list[MidiEvent],
+        midi_events: list[midi_models.MidiEvent],
     ) -> "MidiLoop":
         """Save generated MIDI to database as a new loop with chat messages."""
         with SessionLocal() as db:
@@ -232,7 +235,7 @@ class _GenerateMidi(weave.Model):
             return loop
 
 
-class GenerateMidiEvent(pydantic.BaseModel):
+class GeneratedMidiEvent(pydantic.BaseModel):
     """A MIDI event with optional timing fields (for LLM generation)."""
 
     chord: Chord | None = pydantic.Field(
@@ -242,7 +245,9 @@ class GenerateMidiEvent(pydantic.BaseModel):
     beat: int | None = pydantic.Field(None, gt=0, lt=9, description="The beat within the measure, starting from 1")
     beat_div4: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into quarters")
     beat_div16: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into 16ths")
-    event: MidiEventType = pydantic.Field(description="MIDI note or CC event")
+    event: str | MidiEventType = pydantic.Field(
+        description='MIDI note, cc, or GM drum name: "C#4", "Sustain", "Open Hi-Hat'
+    )
     value: int = pydantic.Field(ge=0, le=100, description="Velocity or CC value, scaled 0-100")
 
 
@@ -252,11 +257,11 @@ class GenerateMidiResponse(pydantic.BaseModel):
     description: str = pydantic.Field(
         description="One-sentence description of the generated loop, describing its musical character, style, or key features"
     )
-    midi_events: list[GenerateMidiEvent] = pydantic.Field(description="List of sparse MIDI events")
+    midi_events: list[GeneratedMidiEvent] = pydantic.Field(description="List of sparse MIDI events")
 
-    def to_midi_events(self) -> list[MidiEvent]:
+    def to_midi_events(self) -> list["midi_models.MidiEvent"]:
         """Convert sparse MIDI events to fully resolved events with explicit timing."""
-        result: list[MidiEvent] = []
+        result: list[midi_models.MidiEvent] = []
 
         chord: Chord | None = None
         measure = 1
@@ -265,6 +270,11 @@ class GenerateMidiResponse(pydantic.BaseModel):
         beat_div16 = 1
 
         for item in self.midi_events:
+            event = midi_utils.str_to_midi_event(item.event)
+            if event is None:
+                log.warning(f"Skipping invalid MIDI event: {item.event}")
+                continue
+
             if item.chord and item.chord != chord:
                 chord = item.chord
             if item.measure and item.measure != measure:
@@ -283,13 +293,13 @@ class GenerateMidiResponse(pydantic.BaseModel):
                 beat_div16 = item.beat_div16
 
             result.append(
-                MidiEvent(
+                midi_models.MidiEvent(
                     chord=chord,
                     measure=measure,
                     beat=beat,
                     beat_div4=beat_div4,
                     beat_div16=beat_div16,
-                    event=item.event,
+                    event=event,
                     value=item.value,
                 )
             )
@@ -342,7 +352,8 @@ def load_chat_history(*, user_id: UUID | None, loop_id: UUID | None, system_prom
 
 async def _generate_midi_openai(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
     client = AsyncOpenAI()
-    response = await client.responses.parse(model=model_name, input=chat_history, text_format=GenerateMidiResponse)
+    messages = cast(list[ResponseInputItemParam], chat_history)
+    response = await client.responses.parse(model=model_name, input=messages, text_format=GenerateMidiResponse)
     if not isinstance(response.output_parsed, GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
     return response.output_parsed
@@ -350,10 +361,19 @@ async def _generate_midi_openai(model_name: "ModelName", chat_history: ChatHisto
 
 async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
     client = AsyncAnthropic()
+    system_prompt = ""
+    messages: list[BetaMessageParam] = []
 
-    # Extract system prompt from chat history
-    system_prompt = next((msg["content"] for msg in chat_history if msg["role"] == "system"), SYSTEM_PROMPT)
-    chat_history = [msg for msg in chat_history if msg["role"] != "system" and msg["content"] != system_prompt]
+    # Format messages for Anthropic
+    for msg in chat_history:
+        if msg["role"] == "system" and not system_prompt:
+            system_prompt = msg["content"]
+        elif msg["role"] == "user":
+            messages.append(BetaMessageParam(role="user", content=msg["content"]))
+        elif msg["role"] == "assistant":
+            messages.append(BetaMessageParam(role="assistant", content=msg["content"]))
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown message role: {msg['role']}")
 
     for n in range(MAX_ATTEMPTS):
         try:
@@ -361,14 +381,14 @@ async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHi
                 model=model_name,
                 max_tokens=4096,
                 betas=["structured-outputs-2025-11-13"],
-                system=system_prompt,
-                messages=chat_history,
+                system=system_prompt or SYSTEM_PROMPT,
+                messages=messages,
                 output_format=GenerateMidiResponse,
             )
             break
         except pydantic.ValidationError as e:
-            msg = f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
-            chat_history.append(ChatMessage(role="system", content=msg))
+            err = f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
+            chat_history.append(ChatMessage(role="system", content=err))
             log.exception(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {str(e)}")
 
     if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):

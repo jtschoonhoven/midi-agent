@@ -4,19 +4,20 @@ import logging
 import os
 import shutil
 import traceback
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import weave
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api.audio import audio_routes
 from api.database import init_db
+from api.instruments import instrument_routes, instrument_utils
 from api.loops import loop_routes
 from api.songs import song_routes
 from api.tracks import track_routes
@@ -53,7 +54,7 @@ app.add_middleware(
 
 # Request/Response logging middleware
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """Log all incoming requests and responses."""
     log.info(f"Request: {request.method} {request.url.path}")
     log.debug(f"Request headers: {dict(request.headers)}")
@@ -71,7 +72,7 @@ async def log_requests(request: Request, call_next):
 
 # Exception handlers
 @app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     """Handle HTTP exceptions with detailed logging."""
     log.error(f"HTTP {exc.status_code}: {request.method} {request.url.path}")
     log.error(f"Error detail: {exc.detail}")
@@ -83,7 +84,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle request validation errors with detailed logging."""
     log.error(f"Validation error: {request.method} {request.url.path}")
     log.error(f"Errors: {exc.errors()}")
@@ -96,7 +97,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
+async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle all other exceptions with full traceback logging."""
     log.error(f"Unhandled exception: {request.method} {request.url.path}")
     log.error(f"Exception type: {type(exc).__name__}")
@@ -115,7 +116,7 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 # Initialize database on startup
 @app.on_event("startup")
-def startup_event():
+def startup_event() -> None:
     load_dotenv()
     weave.init(os.environ["PROJECT_ID"])
 
@@ -132,6 +133,7 @@ def startup_event():
         raise RuntimeError(error_msg)
 
     init_db()
+    instrument_utils.init_db()
     # Create audio output directory if it doesn't exist
     audio_dir = Path(__file__).parent.parent / "audio_output"
     audio_dir.mkdir(exist_ok=True)
@@ -144,7 +146,7 @@ if audio_output_dir.exists():
 
 # Register routers
 app.include_router(song_routes.router)
-app.include_router(audio_routes.router)
+app.include_router(instrument_routes.router)
 app.include_router(loop_routes.router)
 app.include_router(track_routes.router)
 app.mount("/public", StaticFiles(directory="api/public", html=False), name="public")

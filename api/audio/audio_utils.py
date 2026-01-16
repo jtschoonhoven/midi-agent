@@ -1,6 +1,7 @@
 """MIDI to audio rendering using FluidSynth."""
 
 import os
+import re
 import tempfile
 import wave
 from pathlib import Path
@@ -56,9 +57,6 @@ def note_name_to_midi_number(note_name: str) -> int | None:
         "Bb": 10,
         "B": 11,
     }
-
-    # Parse note name like "C4" or "C#4"
-    import re
 
     match = re.match(r"^([A-G][b#]?)(-?\d+)$", note_name)
     if not match:

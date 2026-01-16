@@ -1,10 +1,9 @@
-"""FastAPI routes for audio rendering."""
+# """FastAPI routes for audio rendering."""
 
-from pathlib import Path
+# from pathlib import Path
 
-import pydantic
-from fastapi import APIRouter, HTTPException
-
+# import pydantic
+# from fastapi import APIRouter
 
 # class RenderRequest(pydantic.BaseModel):
 #     """Request payload for /api/midi/render endpoint."""
@@ -21,38 +20,38 @@ from fastapi import APIRouter, HTTPException
 #     sample_rate: int = pydantic.Field(gt=0, description="Sample rate of the audio in Hz")
 
 
-router = APIRouter(prefix="/api/midi", tags=["audio"])
+# router = APIRouter(prefix="/api/midi", tags=["audio"])
 
 
-class PublicFilesResponse(pydantic.BaseModel):
-    """Response containing list of files in the public folder."""
+# class PublicFilesResponse(pydantic.BaseModel):
+#     """Response containing list of files in the public folder."""
 
-    public: list[str] = pydantic.Field(description="List of file paths relative to the public folder")
+#     public: list[str] = pydantic.Field(description="List of file paths relative to the public folder")
 
 
-@router.get("/samples", response_model=PublicFilesResponse)
-async def list_samples() -> PublicFilesResponse:
-    """
-    List all instrument samples in the public/instruments folder.
-    """
-    # Get the instruments folder path
-    project_root = Path(__file__).parent.parent
-    instruments_dir = project_root / "public" / "instruments"
+# @router.get("/samples", response_model=PublicFilesResponse)
+# async def list_samples() -> PublicFilesResponse:
+#     """
+#     List all instrument samples in the public/instruments folder.
+#     """
+#     # Get the instruments folder path
+#     project_root = Path(__file__).parent.parent
+#     instruments_dir = project_root / "public" / "instruments"
 
-    # Collect all files recursively from instruments folder
-    files: list[str] = []
-    public_dir = project_root / "public"
-    for file_path in instruments_dir.rglob("*"):
-        if file_path.is_file() and not file_path.name.startswith("."):
-            # Get path relative to public folder (includes "instruments/" prefix)
-            relative_path = file_path.relative_to(public_dir)
-            # Convert to forward slashes for consistency across platforms
-            files.append(str(relative_path).replace("\\", "/"))
+#     # Collect all files recursively from instruments folder
+#     files: list[str] = []
+#     public_dir = project_root / "public"
+#     for file_path in instruments_dir.rglob("*"):
+#         if file_path.is_file() and not file_path.name.startswith("."):
+#             # Get path relative to public folder (includes "instruments/" prefix)
+#             relative_path = file_path.relative_to(public_dir)
+#             # Convert to forward slashes for consistency across platforms
+#             files.append(str(relative_path).replace("\\", "/"))
 
-    # Sort for consistent ordering
-    files.sort()
+#     # Sort for consistent ordering
+#     files.sort()
 
-    return PublicFilesResponse(public=files)
+#     return PublicFilesResponse(public=files)
 
 
 # @router.post("/render", response_model=RenderResponse)
