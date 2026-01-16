@@ -14,6 +14,7 @@ from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 from weave.flow.scorer import ApplyScorerResult
+from weave.trace.call import Call
 from weave.trace.vals import WeaveList
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
@@ -147,12 +148,17 @@ class _GenerateMidi(weave.Model):
 
         for n in range(MAX_ATTEMPTS):
             # Invoke agent and evaluate the response
-            response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
+            result: tuple[GenerateMidiResponse, Call] = await generate_midi.call(
+                self.model_name, expect_measures, chat_history
+            )
+            response, call = result
             score_result: ApplyScorerResult = await call.apply_scorer(midi_evals.evaluate_midi_events)
             score: midi_evals.EvalResult = score_result.result
 
             if score.get("ok"):
                 break  # Exit retry loop on success
+
+            call.feedback.add_reaction("👎")
 
             # Update the chat history with the error message and retry
             msg = f"The generated MIDI events failed validation, please fix and try again: {score.get('error', 'Unknown error')}"
@@ -349,14 +355,21 @@ async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHi
     system_prompt = next((msg["content"] for msg in chat_history if msg["role"] == "system"), SYSTEM_PROMPT)
     chat_history = [msg for msg in chat_history if msg["role"] != "system" and msg["content"] != system_prompt]
 
-    anthropic_response = await client.beta.messages.parse(
-        model=model_name,
-        max_tokens=4096,
-        betas=["structured-outputs-2025-11-13"],
-        system=system_prompt,
-        messages=chat_history,
-        output_format=GenerateMidiResponse,
-    )
+    for n in range(MAX_ATTEMPTS):
+        try:
+            anthropic_response = await client.beta.messages.parse(
+                model=model_name,
+                max_tokens=4096,
+                betas=["structured-outputs-2025-11-13"],
+                system=system_prompt,
+                messages=chat_history,
+                output_format=GenerateMidiResponse,
+            )
+            break
+        except pydantic.ValidationError as e:
+            msg = f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
+            chat_history.append(ChatMessage(role="system", content=msg))
+            log.exception(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {str(e)}")
 
     if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")

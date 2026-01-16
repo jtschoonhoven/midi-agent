@@ -274,11 +274,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const devices: MidiOutput[] = [BROWSER_AUDIO_OUTPUT];
 
     midiAccess.outputs.forEach((output) => {
-      devices.push({
-        id: output.id || output.name || "unknown",
-        name: output.name || "Unnamed MIDI Device",
-        type: "device",
-      });
+      if (output.state === "connected") {
+        devices.push({
+          id: output.id || output.name || "unknown",
+          name: output.name || "Unnamed MIDI Device",
+          type: "device",
+        });
+      }
     });
 
     setMidiOutputs(devices);

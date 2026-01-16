@@ -2,8 +2,10 @@
 from api.chats.chat_types import ModelName, ModelProvider
 
 MODEL_PROVIDER_MAP: dict[ModelName, tuple[ModelProvider, ModelName]] = {
+    "claude-opus-4-1": ("anthropic", "claude-opus-4-1"),
     "claude-haiku-4-5": ("anthropic", "claude-haiku-4-5"),
     "claude-sonnet-4-5": ("anthropic", "claude-sonnet-4-5"),
+    "claude-opus-4-5": ("anthropic", "claude-opus-4-5"),
     "gpt-4o-mini": ("openai", "gpt-4o-mini"),
     "gpt-4o": ("openai", "gpt-4o"),
     "gpt-5.2": ("openai", "gpt-5.2"),
