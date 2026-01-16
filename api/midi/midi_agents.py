@@ -5,15 +5,15 @@ Docs: https://docs.wandb.ai/weave/guides/core-types/models
 
 import logging
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, TypedDict
 from uuid import UUID, uuid4
 
 import pydantic
 import weave
 from fastapi import HTTPException
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from weave.flow.scorer import ApplyScorerResult, ApplyScorerSuccess
+from openai import AsyncOpenAI
+from weave.flow.scorer import ApplyScorerResult
+from weave.trace.vals import WeaveDict, WeaveList
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
 from api.chats import chat_models
@@ -30,29 +30,16 @@ MAX_ATTEMPTS = 3
 
 log = logging.getLogger(__name__)
 
-ChatHistory = list[SystemMessage | HumanMessage | AIMessage]
 
-PLANNING_PROMPT = """You are a music theory expert and composition planner.
+class ChatMessage(TypedDict):
+    role: str
+    content: str
 
-Your job is to analyze a user's musical request and create a high-level plan that includes:
-- The appropriate key for the piece
-- A suitable tempo (BPM)
-- The time signature
-- The number of measures (1-32)
-- A chord progression that fits the style
-- A brief description of the style/feel
 
-Be thoughtful about your choices. Consider the mood, genre, and any specific requests the user made.
-Explain your reasoning so your choices can be evaluated.
+ChatHistory = list[ChatMessage]
 
-Examples of good reasoning:
-- "You requested 'bouncy piano' which suggests an upbeat feel. I chose 120 BPM in G major with a I-V-vi-IV progression for its bright, accessible sound."
-- "For a melancholic ballad, I selected D minor at 72 BPM with a i-VI-III-VII progression to create emotional depth."
 
-IMPORTANT: If set, do not change the current key, time signature, BPM, or measures unless it is explicitly requested by the user.
-"""
-
-GENERATION_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
+SYSTEM_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
 The plan specifies: key, BPM, time signature, measures, style, and chord progression.
 
 Your job is to translate this into concrete MIDI events using the provided schema.
@@ -60,7 +47,8 @@ Follow the chord progression and style guidance exactly.
 Create musical phrases that fit the specified feel.
 Generate exactly the specified number of measures of music.
 
-Each SparseMidiEvent has:
+Each midi event has:
+- chord: the underlying chord in the progression (does not necessarily match the current note): I, V7, IIdim, etc.
 - measure: which measure (starting from 1, unbounded)
 - beat: which beat in the measure (starting from 1, up to the time signature's beats per measure)
 - beat_div4: one quarter of a beat (1-4 inclusive)
@@ -69,8 +57,8 @@ Each SparseMidiEvent has:
 - value: velocity/intensity 0-100 (note-off events have a velocity of 0)
 
 Carefully consider the timing of notes (measure/beat) as well as their duration (delta from note-on to note-off).
+Ensure that the number of note-on events equals the number of note-off events for each note.
 You are encouraged to use the documented CC events (Sustain, ModWheel) when appropriate.
-Generate a musically coherent sequence that realizes the plan.
 
 IMPORTANT: Also provide a brief one-sentence description of what you generated. This should describe the musical
 character, style, or key features of the loop you created (e.g., "A bright 4-bar piano melody in C major with
@@ -85,13 +73,13 @@ def get_agent() -> "_GenerateMidi":
     """Get a client for the GenerateMidi model."""
     global _CLIENT
     if _CLIENT is None:
-        _CLIENT = _GenerateMidi(model_name=DEFAULT_MODEL_NAME, system_prompt=GENERATION_PROMPT)
+        _CLIENT = _GenerateMidi(model_name=DEFAULT_MODEL_NAME, system_prompt=SYSTEM_PROMPT)
     return _CLIENT
 
 
 @weave.op()
 async def generate_midi(
-    model_name: "ModelName", expect_measures: int, chat_history: ChatHistory
+    model_name: "ModelName", expect_measures: int, chat_history: ChatHistory | WeaveList
 ) -> "GenerateMidiResponse":
     """
     Run inference to generate MIDI events using the given model and chat history.
@@ -101,21 +89,34 @@ async def generate_midi(
         log.error("No chat history provided")
         raise HTTPException(status_code=500)
 
+    # Hack: During evals, chat_history is replaced by an immutable WeaveList which must be unwrapped back to a mutable list
+    if isinstance(chat_history, WeaveList):
+        chat_history = chat_history.unwrap()
+
     # Inject a constraint for the number of measures
-    user_msg = chat_history[-1].content
-    chat_history[
-        -1
-    ].content = f"{user_msg}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
+    user_content = chat_history[-1]["content"]
+    patched_user_content = (
+        f"{user_content}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
+    )
+    chat_history[-1]["content"] = patched_user_content
 
     # Get provider from the map (returns tuple of (provider, model_name))
     provider, _ = MODEL_PROVIDER_MAP[model_name]
 
-    model = init_chat_model(
-        model_name,
-        model_provider=provider,
-    ).with_structured_output(GenerateMidiResponse)
+    if provider != "openai":
+        raise HTTPException(status_code=400, detail="Only OpenAI models are supported in this agent.")
 
-    return await model.ainvoke(chat_history)
+    client = AsyncOpenAI()
+    response = await client.responses.parse(
+        model=model_name,
+        input=chat_history,
+        text_format=GenerateMidiResponse,
+    )
+
+    if response.output_parsed is None:
+        raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
+
+    return response.output_parsed
 
 
 class _GenerateMidi(weave.Model):
@@ -143,26 +144,27 @@ class _GenerateMidi(weave.Model):
         model_provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
         # Check for required API keys
-        if model_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic models")
         if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
+        if model_provider != "openai":
+            raise ValueError("Only OpenAI models are supported in this agent.")
 
         # Get the chat history and add the current prompt
-        chat_history = self.load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=GENERATION_PROMPT)
-        chat_history.append(HumanMessage(content=user_prompt))
+        chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
+        chat_history.append(ChatMessage(role="user", content=user_prompt))
 
         for n in range(MAX_ATTEMPTS):
             # Invoke agent and evaluate the response
             response, call = await generate_midi.call(self.model_name, expect_measures, chat_history)
-            score: midi_evals.EvalResult = await call.apply_scorer(midi_evals.evaluate_midi_events).result
+            score_result: ApplyScorerResult = await call.apply_scorer(midi_evals.evaluate_midi_events)
+            score: midi_evals.EvalResult = score_result.result
 
             if score.get("ok"):
                 break  # Exit retry loop on success
 
             # Update the chat history with the error message and retry
             msg = f"The generated MIDI events failed validation, please fix and try again: {score.get('error', 'Unknown error')}"
-            chat_history.append(SystemMessage(content=msg))
+            chat_history.append({"role": "system", "content": msg})
             log.error(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {score}")
 
         # Raise on failure after max attempts
@@ -181,33 +183,6 @@ class _GenerateMidi(weave.Model):
             midi_events=midi_events,
         )
         return loop
-
-    @staticmethod
-    def load_chat_history(
-        *, user_id: UUID, loop_id: UUID, system_prompt: str
-    ) -> list[SystemMessage | HumanMessage | AIMessage]:
-        """Load chat history from a specific loop or the most recent loop in a track."""
-        with SessionLocal() as db:
-            loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
-            if not loop:
-                raise HTTPException(status_code=404)
-
-            # Initialize history with the system prompt
-            history: list[SystemMessage | HumanMessage | AIMessage] = [SystemMessage(content=system_prompt)]
-
-            # Convert database messages to LangChain messages
-            for chat in sorted(loop.chat_messages, key=lambda x: x.created_at):
-                if chat.role == "system":
-                    history.append(SystemMessage(content=chat.msg))
-                if chat.role == "user":
-                    history.append(HumanMessage(content=chat.msg))
-                elif chat.role == "assistant":
-                    history.append(AIMessage(content=chat.msg))
-                else:
-                    log.error(f"Unknown message role: {chat.role}")
-                    raise HTTPException(status_code=500)
-
-            return history
 
     def update_loop(
         self,
@@ -336,6 +311,37 @@ class GenerateMidiResponse(pydantic.BaseModel):
         return result
 
 
+def load_chat_history(*, user_id: UUID | None, loop_id: UUID | None, system_prompt: str) -> ChatHistory:
+    """
+    Load chat history for the given loop (or just the system prompt if no loop ID is provided).
+    """
+    # Initialize history with the system prompt
+    history: ChatHistory = [{"role": "system", "content": system_prompt}]
+
+    # Nothing to load if no IDs were provided: the history is just the system prompt
+    if not user_id or not loop_id:
+        return history
+
+    with SessionLocal() as db:
+        loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
+        if not loop:
+            raise HTTPException(status_code=404)
+
+        # Convert database messages to OpenAI chat messages
+        for chat in sorted(loop.chat_messages, key=lambda x: x.created_at):
+            if chat.role == "system":
+                history.append(ChatMessage(role="system", content=chat.msg))
+            if chat.role == "user":
+                history.append(ChatMessage(role="user", content=chat.msg))
+            elif chat.role == "assistant":
+                history.append(ChatMessage(role="assistant", content=chat.msg))
+            else:
+                log.error(f"Unknown message role: {chat.role}")
+                raise HTTPException(status_code=500)
+
+        return history
+
+
 if __name__ == "__main__":
     """
     Invoke the GenerateMidi model directly from the CLI.
@@ -367,61 +373,26 @@ if __name__ == "__main__":
     weave.init(os.environ["PROJECT_ID"])
 
     parser = argparse.ArgumentParser(description="Generate MIDI events using LLM with chat history")
-    parser.add_argument(
-        "--user-id",
-        default="00000000-0000-0000-0000-000000000000",
-        help="User ID (UUID)",
-    )
-    parser.add_argument(
-        "--track-id",
-        default="00000000-0000-0000-0000-000000000000",
-        help="Track ID (UUID)",
-    )
-    parser.add_argument(
-        "--loop-id",
-        default="00000000-0000-0000-0000-000000000000",
-        help="Loop ID (UUID)",
-    )
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        required=True,
-        help="User prompt for MIDI generation",
-    )
-    parser.add_argument(
-        "--measures",
-        type=int,
-        default=4,
-        help="Number of measures to generate",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="claude-sonnet-4-5",
-        help="Model name (default: claude-sonnet-4-5)",
-    )
-
+    parser.add_argument("--prompt", "-p", required=True, help="User prompt for MIDI generation")
+    parser.add_argument("--user-id", type=UUID, help="Optional User ID (UUID)")
+    parser.add_argument("--track-id", type=UUID, help="Optional Track ID (UUID)")
+    parser.add_argument("--loop-id", type=UUID, help="Optional Loop ID (UUID)")
+    parser.add_argument("--system-prompt", "-s", default=SYSTEM_PROMPT, help="System prompt")
+    parser.add_argument("--num-measures", "-n", type=int, default=1, help="Number of measures to generate")
+    parser.add_argument("--model", "-m", default=DEFAULT_MODEL_NAME, help="Model name")
     args = parser.parse_args()
 
-    # Validate UUIDs
-    try:
-        user_id = UUID(args.user_id)
-        loop_id = UUID(args.loop_id) if args.loop_id else None
-    except ValueError as e:
-        print(f"Error: Invalid UUID format - {e}", file=sys.stderr)
-        sys.exit(1)
-
     # Create model instance
-    model = _GenerateMidi(model_name=args.model, system_prompt=GENERATION_PROMPT)
+    model = _GenerateMidi(model_name=args.model, system_prompt=args.system_prompt)
 
     # Run async invoke
     async def main():
         try:
             midi_events, new_loop_id = await model.invoke(
-                user_id=user_id,
-                loop_id=loop_id,
+                user_id=args.user_id,
+                loop_id=args.loop_id,
                 user_prompt=args.prompt,
-                expect_measures=args.measures,
+                expect_measures=args.num_measures,
             )
             # Print results as JSON
             result = {"loop_id": new_loop_id, "midi_events": [event.model_dump() for event in midi_events]}

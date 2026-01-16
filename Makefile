@@ -29,8 +29,13 @@ mypy:
 
 check: lint mypy
 
+# Generate typescript bindings for the API
 types:
 	cd app && npm run generate:types
 
 test:
 	uv run pytest api/tests/ -v
+
+# Run the evaluation suite
+eval:
+	uv run python api/midi/midi_evals.py

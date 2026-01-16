@@ -131,7 +131,7 @@ def chat(
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, StateGraph
     from midiagent.ai import (
-        GENERATION_PROMPT,
+        SYSTEM_PROMPT,
         PLANNING_PROMPT,
         DslResponse,
         GenerationNodeOutput,
@@ -197,7 +197,7 @@ def chat(
 
         Original user request: {state["user_request"]}
     """
-        messages = [{"role": "system", "content": GENERATION_PROMPT}, {"role": "user", "content": generation_request}]
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": generation_request}]
         response: DslResponse = generation_model.invoke(messages, config)
         return {"response": response}
 

@@ -72,7 +72,7 @@ def get_song_for_user(db: Session, user_id: str | UUID, song_id: str | UUID) -> 
 # IMPORTANT: If set, do not change the current key, time signature, BPM, or measures unless it is explicitly requested by the user.
 # """
 
-# GENERATION_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
+# SYSTEM_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
 # The plan specifies: key, BPM, time signature, measures, style, and chord progression.
 
 # Your job is to translate this into concrete MIDI events using the provided schema.
@@ -203,7 +203,7 @@ def get_song_for_user(db: Session, user_id: str | UUID, song_id: str | UUID) -> 
 
 #     Original user request: {state["user_request"]}
 # """
-#     messages = [{"role": "system", "content": GENERATION_PROMPT}, {"role": "user", "content": generation_request}]
+#     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": generation_request}]
 #     response: DslResponse = generation_model.invoke(messages, config)
 #     return {"response": response}
 
