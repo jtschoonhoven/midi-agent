@@ -154,7 +154,7 @@ async def create_song(
     user_id: UUID = Depends(get_current_user_id),
 ) -> song_schemas.SongDetailResponse:
     """
-    Create a new song with an empty track."""
+    Create a new song with three default tracks (piano, bass, drums)."""
     try:
         # Auto-generate title if not provided
         title = request.title
@@ -173,16 +173,24 @@ async def create_song(
         db.add(song)
         db.flush()  # Flush to get the song ID without committing
 
-        # Create an empty track with default MIDI channel 1
-        track = track_models.MidiTrack(
-            song_id=song.id,
-            title="Track 1",
-            midi_channel=1,
-        )
-        db.add(track)
+        # Create three default tracks: piano, bass, drums
+        tracks_config = [
+            {"title": "Piano", "midi_channel": 1, "instrument": "piano"},
+            {"title": "Bass", "midi_channel": 2, "instrument": "bass"},
+            {"title": "Drums", "midi_channel": 3, "instrument": "drum"},
+        ]
+
+        for config in tracks_config:
+            track = track_models.MidiTrack(
+                song_id=song.id,
+                title=config["title"],
+                midi_channel=config["midi_channel"],
+                instrument=config["instrument"],
+            )
+            db.add(track)
+
         db.commit()
         db.refresh(song)
-        db.refresh(track)
 
         return song.to_detail_response()
     except Exception as e:

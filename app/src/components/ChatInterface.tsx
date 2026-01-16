@@ -117,7 +117,11 @@ export default function ChatInterface() {
   const [isDeletingTrack, setIsDeletingTrack] = useState(false);
   const [editedTrackTitle, setEditedTrackTitle] = useState("");
   const [editedTrackChannel, setEditedTrackChannel] = useState(1);
+  const [editedTrackInstrument, setEditedTrackInstrument] = useState<"piano" | "bass" | "drum">("piano");
   const [isUpdatingTrack, setIsUpdatingTrack] = useState(false);
+
+  // Track loops that are currently generating MIDI
+  const [generatingLoops, setGeneratingLoops] = useState<Set<string>>(new Set());
 
   const toggleDrawer = (open: boolean) => () => {
     setDrawerOpen(open);
@@ -189,6 +193,7 @@ export default function ChatInterface() {
         tracks: songDetail.tracks.map((track) => ({
           id: track.id,
           midi_channel: track.midi_channel,
+          instrument: track.instrument,
           loops: (track.loops || []).map((loop) => ({
             id: loop.id,
             offset: loop.offset,
@@ -280,6 +285,47 @@ export default function ChatInterface() {
     }
   };
 
+  // Poll for loop updates
+  const pollLoopUpdates = async (loopId: string) => {
+    const maxAttempts = 60; // Poll for up to 60 seconds
+    const pollInterval = 1000; // 1 second between polls
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      try {
+        const result = await getLoop(loopId);
+        if (result.data && result.data.midi_events.length > 0) {
+          // Loop has MIDI events now - it's done generating
+          setGeneratingLoops(prev => {
+            const next = new Set(prev);
+            next.delete(loopId);
+            return next;
+          });
+
+          // Reload song details
+          if (selectedSongId) {
+            const songResult = await getSong(selectedSongId);
+            if (songResult.data) {
+              setSongDetail(songResult.data);
+            }
+          }
+          return;
+        }
+      } catch (error) {
+        console.error("Error polling loop:", error);
+      }
+    }
+
+    // Timeout - remove from generating set
+    setGeneratingLoops(prev => {
+      const next = new Set(prev);
+      next.delete(loopId);
+      return next;
+    });
+    console.warn(`Loop ${loopId} generation timed out`);
+  };
+
   // Handle loop creation and chat submission
   const handleSubmitLoop = async () => {
     if (!loopPrompt.trim()) {
@@ -316,36 +362,48 @@ export default function ChatInterface() {
 
         const newLoop = createResult.data;
 
-        // Step 2: Send the initial chat message to start inference
-        const chatResult = await appendLoopChat({
-          loop_id: newLoop.id,
-          msg: loopPrompt,
-          measures: loopMeasures,
-        });
-
-        if (!chatResult.data) {
-          console.error("Failed to start loop inference:", chatResult.error);
-          alert("Loop created but failed to process prompt. Please try again.");
-          return;
-        }
-
-        // Step 3: Update the local song detail with the new loop
+        // Step 2: Reload song to show the new loop card
         if (songDetail && selectedSongId) {
-          // Reload the song details to get the updated loop data
           const result = await getSong(selectedSongId);
           if (result.data) {
             setSongDetail(result.data);
           }
         }
 
-        // Close modal and reset form
+        // Step 3: Close modal immediately
         setShowLoopModal(false);
         setLoopPrompt("");
         setLoopMeasures(4);
+        setIsCreatingLoop(false);
+
+        // Step 4: Mark loop as generating and start chat in background
+        setGeneratingLoops(prev => new Set(prev).add(newLoop.id));
+
+        // Start background generation (don't await)
+        (async () => {
+          try {
+            await appendLoopChat({
+              loop_id: newLoop.id,
+              msg: loopPrompt,
+              measures: loopMeasures,
+            });
+
+            // Start polling for updates
+            await pollLoopUpdates(newLoop.id);
+          } catch (error) {
+            console.error("Failed to generate loop:", error);
+            setGeneratingLoops(prev => {
+              const next = new Set(prev);
+              next.delete(newLoop.id);
+              return next;
+            });
+            alert("Failed to process prompt. Please try editing the loop to try again.");
+          }
+        })();
+
       } catch (error) {
         console.error("Failed to create loop:", error);
         alert("Failed to create loop. Please try again.");
-      } finally {
         setIsCreatingLoop(false);
       }
     } else {
@@ -479,6 +537,7 @@ export default function ChatInterface() {
     setSelectedTrack(track);
     setEditedTrackTitle(track.title);
     setEditedTrackChannel(track.midi_channel);
+    setEditedTrackInstrument(track.instrument);
     setShowTrackModal(true);
   };
 
@@ -549,6 +608,7 @@ export default function ChatInterface() {
       const result = await updateTrack(selectedTrack.id, {
         title: editedTrackTitle,
         midi_channel: editedTrackChannel,
+        instrument: editedTrackInstrument,
       });
 
       if (result.error) {
@@ -766,6 +826,9 @@ export default function ChatInterface() {
                     <Typography variant="body2" color="text.secondary">
                       Channel {track.midi_channel}
                     </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ textTransform: "capitalize" }}>
+                      {track.instrument}
+                    </Typography>
                   </CardContent>
                 </Card>
               ))}
@@ -866,7 +929,6 @@ export default function ChatInterface() {
                         position: "relative",
                         height: 140 + 16, // Card height + spacing
                         display: "flex",
-                        mb: 2,
                       }}
                     >
                       {/* Grid background with measure markers - droppable cells */}
@@ -925,33 +987,46 @@ export default function ChatInterface() {
                             }),
                           }));
 
+                          const isGenerating = generatingLoops.has(loop.id);
+
                           return (
                             <Card
-                              ref={drag}
+                              ref={isGenerating ? undefined : drag}
                               sx={{
                                 position: "absolute",
                                 left: `${left}px`,
                                 width: `${width}px`,
                                 height: 140,
-                                cursor: isDragging ? "grabbing" : "grab",
+                                cursor: isGenerating ? "default" : isDragging ? "grabbing" : "grab",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 opacity: isDragging ? 0.5 : 1,
                                 "&:hover": {
-                                  bgcolor: "action.hover",
-                                  boxShadow: 2,
+                                  bgcolor: isGenerating ? "inherit" : "action.hover",
+                                  boxShadow: isGenerating ? 0 : 2,
                                 },
                               }}
-                              onClick={() => handleOpenEditLoopModal(loop)}
+                              onClick={isGenerating ? undefined : () => handleOpenEditLoopModal(loop)}
                             >
                               <CardContent sx={{ textAlign: "center", p: 2 }}>
-                                <Typography variant="subtitle2" gutterBottom>
-                                  Loop {index + 1}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {loop.measures} measures • {loop.midi_events.length} events
-                                </Typography>
+                                {isGenerating ? (
+                                  <Stack spacing={2} alignItems="center">
+                                    <CircularProgress size={32} />
+                                    <Typography variant="caption" color="text.secondary">
+                                      Generating...
+                                    </Typography>
+                                  </Stack>
+                                ) : (
+                                  <>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                      Loop {index + 1}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {loop.measures} measures • {loop.midi_events.length} events
+                                    </Typography>
+                                  </>
+                                )}
                               </CardContent>
                             </Card>
                           );
@@ -1317,6 +1392,20 @@ export default function ChatInterface() {
               helperText="MIDI channel (1-16)"
               required
             />
+
+            <FormControl fullWidth disabled={isUpdatingTrack || isDeletingTrack}>
+              <InputLabel id="instrument-select-label">Instrument</InputLabel>
+              <Select
+                labelId="instrument-select-label"
+                value={editedTrackInstrument}
+                label="Instrument"
+                onChange={(e) => setEditedTrackInstrument(e.target.value as "piano" | "bass" | "drum")}
+              >
+                <MenuItem value="piano">Piano</MenuItem>
+                <MenuItem value="bass">Bass</MenuItem>
+                <MenuItem value="drum">Drum</MenuItem>
+              </Select>
+            </FormControl>
           </Stack>
 
           {/* Footer */}

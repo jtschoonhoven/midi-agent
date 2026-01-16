@@ -393,6 +393,8 @@ async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHi
 
     if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")
+
+    print(anthropic_response.parsed_output)
     return anthropic_response.parsed_output
 
 

@@ -4,15 +4,19 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
+from api.instruments.instrument_constants import INSTRUMENT_TYPES
+from api.instruments.instrument_types import InstrumentType
 from api.tracks import track_schemas
 
 if TYPE_CHECKING:
     from api.loops.loop_models import MidiLoop
     from api.songs.song_models import MidiSong
+
+DEFAULT_INST: InstrumentType = "piano"
 
 
 class MidiTrack(Base):
@@ -25,6 +29,7 @@ class MidiTrack(Base):
     song_id: Mapped[str] = mapped_column(String(36), ForeignKey("midi_songs.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     midi_channel: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    instrument: Mapped[InstrumentType] = mapped_column(Enum(*INSTRUMENT_TYPES), default=DEFAULT_INST, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -45,6 +50,7 @@ class MidiTrack(Base):
             song_id=self.song_id,
             title=self.title,
             midi_channel=self.midi_channel,
+            instrument=self.instrument,
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
         )
@@ -55,6 +61,7 @@ class MidiTrack(Base):
             song_id=self.song_id,
             title=self.title,
             midi_channel=self.midi_channel,
+            instrument=self.instrument,
             loops=[loop.to_response() for loop in self.loops],
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),

@@ -93,8 +93,8 @@ async def update_track(
     user_id: UUID = Depends(auth.get_current_user_id),
 ) -> "track_schemas.TrackResponse":
     """
-    Update a track's title and/or MIDI channel.
-    Both fields are optional - only provided fields will be updated.
+    Update a track's title, MIDI channel, and/or instrument.
+    All fields are optional - only provided fields will be updated.
     """
     track = track_utils.get_track_for_user(db, user_id, track_id)
 
@@ -106,6 +106,9 @@ async def update_track(
 
     if request.midi_channel is not None:
         track.midi_channel = request.midi_channel
+
+    if request.instrument is not None:
+        track.instrument = request.instrument
 
     db.commit()
     db.refresh(track)

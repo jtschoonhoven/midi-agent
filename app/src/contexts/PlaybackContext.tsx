@@ -35,6 +35,7 @@ interface Loop {
 interface Track {
   id: string;
   midi_channel: number;
+  instrument: "piano" | "bass" | "drum";
   loops: Loop[];
 }
 
@@ -80,6 +81,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [songData, setSongData] = useState<SongData | null>(null);
   const synthsRef = useRef<Map<number, any>>(new Map());
   const synthsLoadedRef = useRef<Set<number>>(new Set());
+  const synthsInstrumentRef = useRef<Map<number, "piano" | "bass" | "drum">>(new Map());
   const [midiOutputs, setMidiOutputs] = useState<MidiOutput[]>([BROWSER_AUDIO_OUTPUT]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState<MidiOutput>(BROWSER_AUDIO_OUTPUT);
   const [hasMidiAccess, setHasMidiAccess] = useState(false);
@@ -130,24 +132,40 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // Don't send events if audio context hasn't been started yet
         if (!audioContextStartedRef.current || !Tone) return;
 
-        const sampler = synthsRef.current.get(channel);
-        if (!sampler) return;
+        const instrument = synthsRef.current.get(channel);
+        if (!instrument) return;
 
         const now = Tone!.now();
+
+        // Check if it's a Players instance (for drums) or Sampler (for melodic instruments)
+        const isPlayers = "player" in instrument;
+
         events.forEach((event) => {
-          // For Sampler, pass the note name directly (e.g., "C4") instead of frequency
-          const noteName = event.event;
+          const eventName = event.event;
 
-          // Check if it's a valid note event (not a CC event like "Sustain")
-          if (noteName && typeof noteName === "string") {
-            const velocity = event.value / 100; // Normalize velocity to 0-1
-
-            if (event.value > 0) {
-              // Note on
-              sampler.triggerAttack(noteName, now, velocity);
+          // Check if it's a valid event (not a CC event like "Sustain")
+          if (eventName && typeof eventName === "string") {
+            if (isPlayers) {
+              // For drum Players: just trigger the sample on note on events
+              if (event.value > 0) {
+                try {
+                  instrument.player(eventName).start(now);
+                } catch (error) {
+                  console.warn(`Failed to play drum sample ${eventName}:`, error);
+                }
+              }
+              // Note: Players don't support note off, samples play to completion
             } else {
-              // Note off
-              sampler.triggerRelease(noteName, now);
+              // For melodic Sampler: use triggerAttack/triggerRelease
+              const velocity = event.value / 100; // Normalize velocity to 0-1
+
+              if (event.value > 0) {
+                // Note on
+                instrument.triggerAttack(eventName, now, velocity);
+              } else {
+                // Note off
+                instrument.triggerRelease(eventName, now);
+              }
             }
           }
         });
@@ -280,48 +298,85 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Find piano instrument
-    const pianoInstrument = instruments.find((inst) => inst.type === "piano");
-    if (!pianoInstrument) {
-      console.error("No piano instrument found");
-      return;
-    }
-
-    // Build sample map from piano instrument samples
-    // Format: { "C3": "http://localhost:8000/public/instruments/piano/C3.wav", ... }
-    const sampleMap: Record<string, string> = {};
-    pianoInstrument.samples.forEach((sample) => {
-      // midi_event is already the note name (e.g., "C3", "A4")
-      // uri is the relative path (e.g., "instruments/piano/C3.wav")
-      sampleMap[sample.midi_event] = `${API_BASE_URL}/${sample.uri}`;
-    });
-
-    console.log(`Piano sampler using ${Object.keys(sampleMap).length} samples`);
-
     const loadPromises: Promise<void>[] = [];
 
     songData.tracks.forEach((track) => {
       const channel = track.midi_channel;
+      const instrumentType = track.instrument;
+
+      // Check if instrument type has changed for this channel
+      const existingInstrumentType = synthsInstrumentRef.current.get(channel);
+      if (existingInstrumentType && existingInstrumentType !== instrumentType) {
+        console.log(`Instrument changed from ${existingInstrumentType} to ${instrumentType} on channel ${channel}, recreating...`);
+        // Dispose old sampler/player
+        const oldInstrument = synthsRef.current.get(channel);
+        if (oldInstrument && oldInstrument.dispose) {
+          oldInstrument.dispose();
+        }
+        // Clear from cache
+        synthsRef.current.delete(channel);
+        synthsLoadedRef.current.delete(channel);
+        synthsInstrumentRef.current.delete(channel);
+      }
 
       // If sampler doesn't exist, create it
       if (!synthsRef.current.has(channel)) {
-        const loadPromise = new Promise<void>((resolve, reject) => {
-          const sampler = new Tone!.Sampler({
-            urls: sampleMap,
-            release: 1,
-            onload: () => {
-              console.log(`Piano sampler loaded for MIDI channel ${channel}`);
-              synthsLoadedRef.current.add(channel);
-              resolve();
-            },
-            onerror: (error) => {
-              console.error(`Failed to load piano sampler for MIDI channel ${channel}:`, error);
-              reject(error);
-            },
-          }).toDestination();
+        // Find the instrument for this track
+        const instrument = instruments.find((inst) => inst.type === instrumentType);
+        if (!instrument) {
+          console.error(`No ${instrumentType} instrument found`);
+          return;
+        }
 
-          synthsRef.current.set(channel, sampler);
-          console.log(`Created piano sampler for MIDI channel ${channel}`);
+        // Build sample map from instrument samples
+        // Format: { "C3": "http://localhost:8000/public/instruments/piano/C3.wav", ... }
+        const sampleMap: Record<string, string> = {};
+        instrument.samples.forEach((sample) => {
+          // midi_event is already the note name (e.g., "C3", "A4")
+          // uri is the relative path (e.g., "public/instruments/piano/C3.wav")
+          sampleMap[sample.midi_event] = `${API_BASE_URL}/${sample.uri}`;
+        });
+
+        console.log(`${instrumentType} sampler using ${Object.keys(sampleMap).length} samples for channel ${channel}`);
+
+        const loadPromise = new Promise<void>((resolve, reject) => {
+          // Use Players for drums (arbitrary key names), Sampler for melodic instruments
+          if (instrumentType === "drum") {
+            const players = new Tone!.Players({
+              urls: sampleMap,
+              onload: () => {
+                console.log(`${instrumentType} players loaded for MIDI channel ${channel}`);
+                synthsLoadedRef.current.add(channel);
+                synthsInstrumentRef.current.set(channel, instrumentType);
+                resolve();
+              },
+              onerror: (error) => {
+                console.error(`Failed to load ${instrumentType} players for MIDI channel ${channel}:`, error);
+                reject(error);
+              },
+            }).toDestination();
+
+            synthsRef.current.set(channel, players);
+            console.log(`Created ${instrumentType} players for MIDI channel ${channel}`);
+          } else {
+            const sampler = new Tone!.Sampler({
+              urls: sampleMap,
+              release: 1,
+              onload: () => {
+                console.log(`${instrumentType} sampler loaded for MIDI channel ${channel}`);
+                synthsLoadedRef.current.add(channel);
+                synthsInstrumentRef.current.set(channel, instrumentType);
+                resolve();
+              },
+              onerror: (error) => {
+                console.error(`Failed to load ${instrumentType} sampler for MIDI channel ${channel}:`, error);
+                reject(error);
+              },
+            }).toDestination();
+
+            synthsRef.current.set(channel, sampler);
+            console.log(`Created ${instrumentType} sampler for MIDI channel ${channel}`);
+          }
         });
 
         loadPromises.push(loadPromise);
