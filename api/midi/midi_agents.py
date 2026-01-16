@@ -10,10 +10,11 @@ from uuid import UUID, uuid4
 
 import pydantic
 import weave
+from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 from weave.flow.scorer import ApplyScorerResult
-from weave.trace.vals import WeaveDict, WeaveList
+from weave.trace.vals import WeaveList
 
 from api.audio.audio_types import Chord, MidiEvent, MidiEventType
 from api.chats import chat_models
@@ -26,17 +27,12 @@ if TYPE_CHECKING:
     from api.chats.chat_models import ModelName
     from api.loops.loop_models import MidiLoop
 
+
+DEFAULT_MODEL_NAME = "claude-haiku-4-5"
 MAX_ATTEMPTS = 3
+_CLIENT: Optional["_GenerateMidi"] = None
 
 log = logging.getLogger(__name__)
-
-
-class ChatMessage(TypedDict):
-    role: str
-    content: str
-
-
-ChatHistory = list[ChatMessage]
 
 
 SYSTEM_PROMPT = """You are a MIDI composer. Given a musical plan, generate the actual MIDI events.
@@ -64,9 +60,13 @@ IMPORTANT: Also provide a brief one-sentence description of what you generated. 
 character, style, or key features of the loop you created (e.g., "A bright 4-bar piano melody in C major with
 staccato eighth notes and a playful rhythm" or "Warm sustained pad chords creating an ambient atmosphere")."""
 
-_CLIENT: Optional["_GenerateMidi"] = None
 
-DEFAULT_MODEL_NAME = "gpt-5-nano"
+class ChatMessage(TypedDict):
+    role: str
+    content: str
+
+
+ChatHistory = list[ChatMessage]
 
 
 def get_agent() -> "_GenerateMidi":
@@ -96,27 +96,19 @@ async def generate_midi(
     # Inject a constraint for the number of measures
     user_content = chat_history[-1]["content"]
     patched_user_content = (
-        f"{user_content}\n\\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
+        f"{user_content}\nIMPORTANT: You must generate exactly {expect_measures} measures of MIDI events."
     )
     chat_history[-1]["content"] = patched_user_content
 
     # Get provider from the map (returns tuple of (provider, model_name))
     provider, _ = MODEL_PROVIDER_MAP[model_name]
 
-    if provider != "openai":
-        raise HTTPException(status_code=400, detail="Only OpenAI models are supported in this agent.")
-
-    client = AsyncOpenAI()
-    response = await client.responses.parse(
-        model=model_name,
-        input=chat_history,
-        text_format=GenerateMidiResponse,
-    )
-
-    if response.output_parsed is None:
-        raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
-
-    return response.output_parsed
+    if provider == "openai":
+        return await _generate_midi_openai(model_name, chat_history)
+    elif provider == "anthropic":
+        return await _generate_midi_anthropic(model_name, chat_history)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
 
 
 class _GenerateMidi(weave.Model):
@@ -146,8 +138,8 @@ class _GenerateMidi(weave.Model):
         # Check for required API keys
         if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
             raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
-        if model_provider != "openai":
-            raise ValueError("Only OpenAI models are supported in this agent.")
+        if model_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic models")
 
         # Get the chat history and add the current prompt
         chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
@@ -340,6 +332,35 @@ def load_chat_history(*, user_id: UUID | None, loop_id: UUID | None, system_prom
                 raise HTTPException(status_code=500)
 
         return history
+
+
+async def _generate_midi_openai(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
+    client = AsyncOpenAI()
+    response = await client.responses.parse(model=model_name, input=chat_history, text_format=GenerateMidiResponse)
+    if not isinstance(response.output_parsed, GenerateMidiResponse):
+        raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
+    return response.output_parsed
+
+
+async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
+    client = AsyncAnthropic()
+
+    # Extract system prompt from chat history
+    system_prompt = next((msg["content"] for msg in chat_history if msg["role"] == "system"), SYSTEM_PROMPT)
+    chat_history = [msg for msg in chat_history if msg["role"] != "system" and msg["content"] != system_prompt]
+
+    anthropic_response = await client.beta.messages.parse(
+        model=model_name,
+        max_tokens=4096,
+        betas=["structured-outputs-2025-11-13"],
+        system=system_prompt,
+        messages=chat_history,
+        output_format=GenerateMidiResponse,
+    )
+
+    if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):
+        raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")
+    return anthropic_response.parsed_output
 
 
 if __name__ == "__main__":

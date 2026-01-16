@@ -69,14 +69,14 @@ def evaluate_midi_events(expect_measures: int, output: "GenerateMidiResponse") -
         expect_measures = expect_measures.get()
 
     # Hack: weave magically serializes pydantic models to dicts when running evals so we have to marshal back to the model type
-    if not isinstance(output, midi_agents.GenerateMidiResponse):
+    if isinstance(output, dict):
         output = midi_agents.GenerateMidiResponse.model_validate(output)
 
     # Group events by note (event name) and count note-on vs note-off
     note_counts: dict[str, int] = defaultdict(lambda: 0)
 
     try:
-        for index, event in enumerate(output.midi_events):
+        for index, event in enumerate(output.to_midi_events()):
             # Validate measures
             if event.measure > expect_measures:
                 raise AssertionError(f"Midi event at index {index} is outside the loop's length: {expect_measures}")

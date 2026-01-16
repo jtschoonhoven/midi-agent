@@ -131,8 +131,8 @@ def chat(
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, StateGraph
     from midiagent.ai import (
-        SYSTEM_PROMPT,
         PLANNING_PROMPT,
+        SYSTEM_PROMPT,
         DslResponse,
         GenerationNodeOutput,
         PipelineState,
