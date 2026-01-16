@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { listSamples } from "../lib/api";
 
 // Dynamic import to avoid initializing AudioContext on page load
 let Tone: typeof import("tone") | null = null;
@@ -8,6 +9,9 @@ async function getTone() {
   }
   return Tone;
 }
+
+// API base URL for loading samples
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 interface MidiEvent {
   measure: number;
@@ -75,11 +79,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [bpm, setBpmState] = useState(120);
   const [songData, setSongData] = useState<SongData | null>(null);
   const synthsRef = useRef<Map<number, any>>(new Map());
+  const synthsLoadedRef = useRef<Set<number>>(new Set());
   const [midiOutputs, setMidiOutputs] = useState<MidiOutput[]>([BROWSER_AUDIO_OUTPUT]);
   const [selectedMidiOutput, setSelectedMidiOutput] = useState<MidiOutput>(BROWSER_AUDIO_OUTPUT);
   const [hasMidiAccess, setHasMidiAccess] = useState(false);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
   const audioContextStartedRef = useRef<boolean>(false);
+  const [pianoSamples, setPianoSamples] = useState<Record<string, string> | null>(null);
 
   // Playback state
   const animationFrameRef = useRef<number | null>(null);
@@ -114,18 +120,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // Don't send events if audio context hasn't been started yet
         if (!audioContextStartedRef.current || !Tone) return;
 
-        const synth = synthsRef.current.get(channel);
-        if (!synth) return;
+        const sampler = synthsRef.current.get(channel);
+        if (!sampler) return;
 
         const now = Tone!.now();
         events.forEach((event) => {
-          const note = Tone!.Frequency(event.event).toFrequency();
+          // For Sampler, pass the note name directly (e.g., "C4") instead of frequency
+          const noteName = event.event;
 
-          if (typeof note === "number" && Number.isFinite(note)) {
+          // Check if it's a valid note event (not a CC event like "Sustain")
+          if (noteName && typeof noteName === "string") {
+            const velocity = event.value / 100; // Normalize velocity to 0-1
+
             if (event.value > 0) {
-              synth.triggerAttack(note, now, event.value / 100);
+              // Note on
+              sampler.triggerAttack(noteName, now, velocity);
             } else {
-              synth.triggerRelease(note, now);
+              // Note off
+              sampler.triggerRelease(noteName, now);
             }
           }
         });
@@ -252,22 +264,75 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Wait for piano samples to be loaded
+    if (!pianoSamples) {
+      console.warn("Piano samples not loaded yet");
+      return;
+    }
+
+    const loadPromises: Promise<void>[] = [];
+
     songData.tracks.forEach((track) => {
-      if (!synthsRef.current.has(track.midi_channel)) {
-        const synth = new Tone!.PolySynth(Tone!.Synth, {
-          oscillator: { type: "triangle" },
-          envelope: {
-            attack: 0.005,
-            decay: 0.1,
-            sustain: 0.3,
-            release: 5,
-          },
-        }).toDestination();
-        synthsRef.current.set(track.midi_channel, synth);
-        console.log(`Created synth for MIDI channel ${track.midi_channel}`);
+      const channel = track.midi_channel;
+
+      // If sampler doesn't exist, create it
+      if (!synthsRef.current.has(channel)) {
+        const loadPromise = new Promise<void>((resolve, reject) => {
+          const sampler = new Tone!.Sampler({
+            urls: pianoSamples,
+            baseUrl: `${API_BASE_URL}/public/instruments/piano/`,
+            release: 1,
+            onload: () => {
+              console.log(`Piano sampler loaded for MIDI channel ${channel}`);
+              synthsLoadedRef.current.add(channel);
+              resolve();
+            },
+            onerror: (error) => {
+              console.error(`Failed to load piano sampler for MIDI channel ${channel}:`, error);
+              reject(error);
+            },
+          }).toDestination();
+
+          synthsRef.current.set(channel, sampler);
+          console.log(`Created piano sampler for MIDI channel ${channel}`);
+        });
+
+        loadPromises.push(loadPromise);
+      }
+      // If sampler exists but hasn't loaded yet, wait for it
+      else if (!synthsLoadedRef.current.has(channel)) {
+        const sampler = synthsRef.current.get(channel);
+        if (sampler && !sampler.loaded) {
+          console.log(`Waiting for existing sampler on channel ${channel} to finish loading...`);
+          const waitPromise = new Promise<void>((resolve) => {
+            const checkLoaded = () => {
+              if (sampler.loaded) {
+                synthsLoadedRef.current.add(channel);
+                console.log(`Sampler on channel ${channel} is now loaded`);
+                resolve();
+              } else {
+                setTimeout(checkLoaded, 100);
+              }
+            };
+            checkLoaded();
+          });
+          loadPromises.push(waitPromise);
+        }
       }
     });
-  }, [songData, selectedMidiOutput]);
+
+    // Wait for all samplers to finish loading
+    if (loadPromises.length > 0) {
+      console.log(`Waiting for ${loadPromises.length} samplers to load...`);
+      try {
+        await Promise.all(loadPromises);
+        console.log("All samplers loaded successfully");
+      } catch (error) {
+        console.error("Failed to load samplers:", error);
+        throw error;
+      }
+    }
+  }, [songData, selectedMidiOutput, pianoSamples]);
 
   // Scan for MIDI devices when MIDI access is granted
   const scanMidiDevices = useCallback((midiAccess: MIDIAccess) => {
@@ -331,6 +396,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         });
     }
   }, [scanMidiDevices]);
+
+  // Fetch piano samples on mount
+  useEffect(() => {
+    const fetchPianoSamples = async () => {
+      try {
+        const result = await listSamples();
+
+        if (result.data) {
+          // Filter to piano samples only (.wav files in instruments/piano/)
+          const pianoFiles = result.data.public.filter(
+            (path) => path.startsWith("instruments/piano/") && path.endsWith(".wav")
+          );
+
+          // Create sample map: { "C3": "C3.wav", ... }
+          // We'll use baseUrl separately so just store filenames
+          const sampleMap: Record<string, string> = {};
+          pianoFiles.forEach((path) => {
+            // Extract note name and filename (e.g., "instruments/piano/C3.wav" -> "C3")
+            const filename = path.split("/").pop();
+            if (filename) {
+              const noteName = filename.replace(".wav", "");
+              sampleMap[noteName] = filename; // Just the filename, not full path
+            }
+          });
+
+          setPianoSamples(sampleMap);
+          console.log(`Loaded ${Object.keys(sampleMap).length} piano samples`);
+        }
+      } catch (error) {
+        console.error("Failed to fetch piano samples:", error);
+      }
+    };
+
+    fetchPianoSamples();
+  }, []);
 
   const play = async () => {
     // Start the audio context if using browser audio
