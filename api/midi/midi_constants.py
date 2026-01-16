@@ -182,6 +182,66 @@ MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "F#9": (0x90, 126),
     "Gb9": (0x90, 126),  # Same as F#9
     "G9": (0x90, 127),
+    "acousticbassdrum": (0x90, 35),  # Acoustic Bass Drum
+    "lowbassdrum": (0x90, 35),  # Low Bass Drum
+    "electricbassdrum": (0x90, 36),  # Electric Bass Drum
+    "highbassdrum": (0x90, 36),  # High Bass Drum
+    "sidestick": (0x90, 37),  # Side Stick
+    "acousticsnare": (0x90, 38),  # Acoustic Snare
+    "handclap": (0x90, 39),  # Hand Clap
+    "electricsnare": (0x90, 40),  # Electric Snare
+    "rimshot": (0x90, 40),  # Rimshot
+    "lowfloortom": (0x90, 41),  # Low Floor Tom
+    "closedhihat": (0x90, 42),  # Closed Hi-hat
+    "highfloortom": (0x90, 43),  # High Floor Tom
+    "pedalhihat": (0x90, 44),  # Pedal Hi-hat
+    "lowtom": (0x90, 45),  # Low Tom
+    "openhihat": (0x90, 46),  # Open Hi-hat
+    "lowmidtom": (0x90, 47),  # Low-Mid Tom
+    "highmidtom": (0x90, 48),  # High-Mid Tom
+    "crashcymbal1": (0x90, 49),  # Crash Cymbal 1
+    "hightom": (0x90, 50),  # High Tom
+    "ridecymbal1": (0x90, 51),  # Ride Cymbal 1
+    "chinesecymbal": (0x90, 52),  # Chinese Cymbal
+    "ridebell": (0x90, 53),  # Ride Bell
+    "tambourine": (0x90, 54),  # Tambourine
+    "splashcymbal": (0x90, 55),  # Splash Cymbal
+    "cowbell": (0x90, 56),  # Cowbell
+    "crashcymbal2": (0x90, 57),  # Crash Cymbal 2
+    "vibraslap": (0x90, 58),  # Vibraslap
+    "ridecymbal2": (0x90, 59),  # Ride Cymbal 2
+    "highbongo": (0x90, 60),  # High Bongo
+    "lowbongo": (0x90, 61),  # Low Bongo
+    "mutehighconga": (0x90, 62),  # Mute High Conga
+    "openhighconga": (0x90, 63),  # Open High Conga
+    "lowconga": (0x90, 64),  # Low Conga
+    "hightimbale": (0x90, 65),  # High Timbale
+    "lowtimbale": (0x90, 66),  # Low Timbale
+    "highagogo": (0x90, 67),  # High Agogo
+    "highagogô": (0x90, 67),  # High Agogô
+    "highagog": (0x90, 67),  # High Agog
+    "lowagogo": (0x90, 68),  # Low Agogo
+    "lowagogô": (0x90, 68),  # Low Agogô
+    "lowagog": (0x90, 68),  # Low Agog
+    "cabasa": (0x90, 69),  # Cabasa
+    "maracas": (0x90, 70),  # Maracas
+    "shortwhistle": (0x90, 71),  # Short Whistle
+    "longwhistle": (0x90, 72),  # Long Whistle
+    "shortguiro": (0x90, 73),  # Short Guiro
+    "shortgüiro": (0x90, 73),  # Short Güiro
+    "shortgiro": (0x90, 73),  # Short Giro
+    "longguiro": (0x90, 74),  # Long Guiro
+    "longgüiro": (0x90, 74),  # Long Güiro
+    "longgiro": (0x90, 74),  # Long Giro
+    "claves": (0x90, 75),  # Claves
+    "highwoodblock": (0x90, 76),  # High Woodblock
+    "lowwoodblock": (0x90, 77),  # Low Woodblock
+    "mutecuica": (0x90, 78),  # Mute Cuica
+    "mutecuíca": (0x90, 78),  # Mute Cuíca
+    "opencuica": (0x90, 79),  # Open Cuica
+    "opencuíca": (0x90, 79),  # Open Cuíca
+    "mutetriangle": (0x90, 80),  # Mute Triangle
+    "opentriangle": (0x90, 81),  # Open Triangle
     "ModWheel": (0xB0, 1),
     "Sustain": (0xB0, 64),
     "AllNotesOff": (0xB0, 123),

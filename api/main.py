@@ -147,6 +147,7 @@ app.include_router(song_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(loop_routes.router)
 app.include_router(track_routes.router)
+app.mount("/public", StaticFiles(directory="api/public", html=False), name="public")
 
 
 @app.get("/health")
