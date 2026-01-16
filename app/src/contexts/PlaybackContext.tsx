@@ -54,6 +54,7 @@ interface MidiOutput {
 interface PlaybackContextType {
   isPlaying: boolean;
   bpm: number;
+  currentBeat: number;
   play: () => void;
   pause: () => void;
   stop: () => void;
@@ -79,6 +80,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpmState] = useState(120);
   const [songData, setSongData] = useState<SongData | null>(null);
+  const [currentBeat, setCurrentBeat] = useState<number>(-1);
   const synthsRef = useRef<Map<number, any>>(new Map());
   const synthsLoadedRef = useRef<Set<number>>(new Set());
   const synthsInstrumentRef = useRef<Map<number, "piano" | "bass" | "drum">>(new Map());
@@ -225,6 +227,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const prevBeat = currentBeatRef.current;
       const curBeat = Math.max(0, prevBeat) + beatDelta;
       currentBeatRef.current = curBeat;
+      setCurrentBeat(curBeat);
 
       // Collect events that should fire in this frame
       const eventsToSend: Array<{ channel: number; event: MidiEvent }> = [];
@@ -511,6 +514,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     // Reset to beginning
     currentBeatRef.current = -1; // -1 to make sure we don't skip the first beat
+    setCurrentBeat(-1);
     setIsPlaying(true);
   };
 
@@ -521,6 +525,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const stop = () => {
     setIsPlaying(false);
     currentBeatRef.current = -1;
+    setCurrentBeat(-1);
   };
 
   const togglePlayPause = async () => {
@@ -542,6 +547,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setIsPlaying(false);
       }
       currentBeatRef.current = -1;
+      setCurrentBeat(-1);
       setSongData(newSongData);
 
       // Update BPM from song data if provided
@@ -557,6 +563,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       value={{
         isPlaying,
         bpm,
+        currentBeat,
         play,
         pause,
         stop,

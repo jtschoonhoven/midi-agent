@@ -77,6 +77,7 @@ export default function ChatInterface() {
   const {
     isPlaying,
     bpm,
+    currentBeat,
     togglePlayPause,
     setBpm: setPlaybackBpm,
     loadSong,
@@ -103,6 +104,7 @@ export default function ChatInterface() {
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [selectedLoop, setSelectedLoop] = useState<LoopDetail | null>(null);
   const [loopMeasures, setLoopMeasures] = useState<number>(4);
+  const [loopOffset, setLoopOffset] = useState<number>(0);
   const [loopPrompt, setLoopPrompt] = useState<string>("");
   const [isCreatingLoop, setIsCreatingLoop] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -122,6 +124,12 @@ export default function ChatInterface() {
 
   // Track loops that are currently generating MIDI
   const [generatingLoops, setGeneratingLoops] = useState<Set<string>>(new Set());
+
+  // Track drag-to-create loop state
+  const [isDraggingNewLoop, setIsDraggingNewLoop] = useState(false);
+  const [dragStartMeasure, setDragStartMeasure] = useState<number | null>(null);
+  const [dragCurrentMeasure, setDragCurrentMeasure] = useState<number | null>(null);
+  const [dragTrackId, setDragTrackId] = useState<string | null>(null);
 
   const toggleDrawer = (open: boolean) => () => {
     setDrawerOpen(open);
@@ -211,6 +219,20 @@ export default function ChatInterface() {
     }
   }, [songDetail, loadSong]);
 
+  // Global mouse up handler for drag-to-create
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isDraggingNewLoop) {
+        handleDragCreateEnd();
+      }
+    };
+
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingNewLoop, dragStartMeasure, dragCurrentMeasure, dragTrackId, songDetail]);
+
   // Create a new song
   const handleCreateSong = async () => {
     try {
@@ -243,18 +265,6 @@ export default function ChatInterface() {
   const handleSelectSong = (songId: string) => {
     setSelectedSongId(songId);
     setDrawerOpen(false);
-  };
-
-  // Handle create loop
-  const handleOpenCreateLoopModal = (trackId: string) => {
-    setLoopModalMode("create");
-    setSelectedTrackId(trackId);
-    setSelectedLoop(null);
-    setLoopMeasures(4); // Reset to default
-    setLoopPrompt(""); // Reset prompt
-    setChatHistory([]);
-    setActiveTab(0); // Reset to chat tab
-    setShowLoopModal(true);
   };
 
   // Handle edit loop
@@ -362,7 +372,12 @@ export default function ChatInterface() {
 
         const newLoop = createResult.data;
 
-        // Step 2: Reload song to show the new loop card
+        // Step 2: Update loop offset if not 0
+        if (loopOffset !== 0) {
+          await updateLoop(newLoop.id, { offset: loopOffset });
+        }
+
+        // Step 3: Reload song to show the new loop card
         if (songDetail && selectedSongId) {
           const result = await getSong(selectedSongId);
           if (result.data) {
@@ -370,10 +385,11 @@ export default function ChatInterface() {
           }
         }
 
-        // Step 3: Close modal immediately
+        // Step 4: Close modal immediately
         setShowLoopModal(false);
         setLoopPrompt("");
         setLoopMeasures(4);
+        setLoopOffset(0);
         setIsCreatingLoop(false);
 
         // Step 4: Mark loop as generating and start chat in background
@@ -659,6 +675,56 @@ export default function ChatInterface() {
     }
   };
 
+  // Handle drag-to-create loop start
+  const handleDragCreateStart = (measureIndex: number, trackId: string, track: Track) => {
+    // Check if there's already a loop at this position
+    const hasLoopAtPosition = track.loops?.some((loop) => {
+      const loopStart = loop.offset || 0;
+      const loopEnd = loopStart + loop.measures;
+      return measureIndex >= loopStart && measureIndex < loopEnd;
+    });
+
+    if (hasLoopAtPosition) {
+      return; // Don't start drag if there's already a loop here
+    }
+
+    setIsDraggingNewLoop(true);
+    setDragStartMeasure(measureIndex);
+    setDragCurrentMeasure(measureIndex);
+    setDragTrackId(trackId);
+  };
+
+  // Handle drag-to-create loop update
+  const handleDragCreateMove = (measureIndex: number) => {
+    if (isDraggingNewLoop && dragStartMeasure !== null) {
+      setDragCurrentMeasure(measureIndex);
+    }
+  };
+
+  // Handle drag-to-create loop end
+  const handleDragCreateEnd = () => {
+    if (isDraggingNewLoop && dragStartMeasure !== null && dragCurrentMeasure !== null && dragTrackId) {
+      // Calculate offset and measures
+      const startMeasure = Math.min(dragStartMeasure, dragCurrentMeasure);
+      const endMeasure = Math.max(dragStartMeasure, dragCurrentMeasure);
+      const measures = endMeasure - startMeasure + 1;
+
+      // Open create loop modal with pre-filled values
+      setSelectedTrackId(dragTrackId);
+      setLoopOffset(startMeasure);
+      setLoopMeasures(measures);
+      setLoopModalMode("create");
+      setLoopPrompt("");
+      setShowLoopModal(true);
+    }
+
+    // Reset drag state
+    setIsDraggingNewLoop(false);
+    setDragStartMeasure(null);
+    setDragCurrentMeasure(null);
+    setDragTrackId(null);
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       {/* Left Drawer */}
@@ -870,7 +936,16 @@ export default function ChatInterface() {
           </Box>
 
           {/* Right scrollable area: Sequencer Grid */}
-          <Box sx={{ flex: 1, px: { xs: 2, sm: 3, md: 4, lg: 6 }, py: 2, overflowX: "auto", overflowY: "auto" }}>
+          <Box
+            sx={{
+              flex: 1,
+              px: { xs: 2, sm: 3, md: 4, lg: 6 },
+              py: 2,
+              overflowX: "auto",
+              overflowY: "auto",
+              userSelect: isDraggingNewLoop ? "none" : "auto",
+            }}
+          >
             {(() => {
               // Calculate total measures needed for the grid
               const MEASURE_WIDTH = 80; // pixels per measure
@@ -888,6 +963,16 @@ export default function ChatInterface() {
               // Add some extra measures for breathing room
               totalMeasures += 4;
 
+              // Calculate current measure from currentBeat and time signature
+              const getBeatsPerMeasure = (timeSignature?: string): number => {
+                if (!timeSignature) return 4;
+                const [numerator] = timeSignature.split("/").map(Number);
+                return numerator || 4;
+              };
+
+              const beatsPerMeasure = getBeatsPerMeasure(songDetail.time_signature);
+              const currentMeasure = currentBeat >= 0 ? Math.floor(currentBeat / beatsPerMeasure) : -1;
+
               return (
                 <Stack spacing={0}>
                   {/* Measure Ruler */}
@@ -900,25 +985,30 @@ export default function ChatInterface() {
                       mb: 2,
                     }}
                   >
-                    {Array.from({ length: totalMeasures }, (_, i) => (
-                      <Box
-                        key={i}
-                        sx={{
-                          width: MEASURE_WIDTH,
-                          flexShrink: 0,
-                          borderRight: 1,
-                          borderColor: "divider",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontWeight: "bold",
-                          color: "text.secondary",
-                          fontSize: "0.875rem",
-                        }}
-                      >
-                        {i + 1}
-                      </Box>
-                    ))}
+                    {Array.from({ length: totalMeasures }, (_, i) => {
+                      const isCurrentMeasure = isPlaying && i === currentMeasure;
+                      return (
+                        <Box
+                          key={i}
+                          sx={{
+                            width: MEASURE_WIDTH,
+                            flexShrink: 0,
+                            borderRight: 1,
+                            borderColor: "divider",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: "bold",
+                            color: isCurrentMeasure ? "primary.main" : "text.secondary",
+                            fontSize: "0.875rem",
+                            bgcolor: isCurrentMeasure ? "primary.light" : "transparent",
+                            transition: "background-color 0.1s, color 0.1s",
+                          }}
+                        >
+                          {i + 1}
+                        </Box>
+                      );
+                    })}
                   </Box>
 
                   {/* Track Grid Rows */}
@@ -944,20 +1034,50 @@ export default function ChatInterface() {
                             }),
                           }));
 
+                          // Check if this cell is part of the drag selection
+                          const isInDragSelection =
+                            isDraggingNewLoop &&
+                            dragTrackId === track.id &&
+                            dragStartMeasure !== null &&
+                            dragCurrentMeasure !== null &&
+                            measureIndex >= Math.min(dragStartMeasure, dragCurrentMeasure) &&
+                            measureIndex <= Math.max(dragStartMeasure, dragCurrentMeasure);
+
+                          // Check if there's a loop at this position
+                          const hasLoopAtPosition = track.loops?.some((loop) => {
+                            const loopStart = loop.offset || 0;
+                            const loopEnd = loopStart + loop.measures;
+                            return measureIndex >= loopStart && measureIndex < loopEnd;
+                          });
+
+                          // Check if this is the current measure during playback
+                          const isCurrentMeasure = isPlaying && measureIndex === currentMeasure;
+
                           return (
                             <Box
                               ref={drop}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleDragCreateStart(measureIndex, track.id, track);
+                              }}
+                              onMouseEnter={() => handleDragCreateMove(measureIndex)}
                               sx={{
                                 width: MEASURE_WIDTH,
                                 flexShrink: 0,
                                 borderRight: 1,
                                 borderColor: "divider",
-                                bgcolor: isOver
-                                  ? "primary.light"
-                                  : measureIndex % 4 === 0
-                                    ? "action.hover"
-                                    : "transparent",
-                                transition: "background-color 0.2s",
+                                bgcolor: isInDragSelection
+                                  ? "primary.main"
+                                  : isOver
+                                    ? "primary.light"
+                                    : isCurrentMeasure
+                                      ? "primary.light"
+                                      : measureIndex % 4 === 0
+                                        ? "action.hover"
+                                        : "transparent",
+                                transition: "background-color 0.1s",
+                                cursor: hasLoopAtPosition ? "default" : "ew-resize",
+                                opacity: isInDragSelection ? 0.6 : 1,
                               }}
                             />
                           );
@@ -1034,49 +1154,6 @@ export default function ChatInterface() {
 
                         return <DraggableLoop key={loop.id} />;
                       })}
-
-                      {/* Create loop button at the end of existing loops */}
-                      {(() => {
-                        // Find the rightmost position
-                        let rightmostPosition = 0;
-                        track.loops?.forEach((loop) => {
-                          const loopEnd = (loop.offset || 0) + loop.measures;
-                          if (loopEnd > rightmostPosition) {
-                            rightmostPosition = loopEnd;
-                          }
-                        });
-
-                        return (
-                          <Card
-                            sx={{
-                              position: "absolute",
-                              left: `${rightmostPosition * MEASURE_WIDTH}px`,
-                              width: MEASURE_WIDTH,
-                              height: 140,
-                              border: "2px dashed",
-                              borderColor: "divider",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              "&:hover": {
-                                borderColor: "primary.main",
-                                bgcolor: "action.hover",
-                              },
-                            }}
-                            onClick={() => handleOpenCreateLoopModal(track.id)}
-                          >
-                            <CardContent sx={{ textAlign: "center", p: 1 }}>
-                              <Stack alignItems="center" spacing={0.5}>
-                                <AddIcon color="action" fontSize="small" />
-                                <Typography variant="caption" color="text.secondary">
-                                  Loop
-                                </Typography>
-                              </Stack>
-                            </CardContent>
-                          </Card>
-                        );
-                      })()}
                     </Box>
                   ))}
                 </Stack>
