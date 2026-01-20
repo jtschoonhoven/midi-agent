@@ -48,7 +48,9 @@ class CreateLoopRequest(pydantic.BaseModel):
 
     track_id: str = pydantic.Field(description="ID of the parent track")
     measures: int = pydantic.Field(ge=0, le=32, description="Number of measures in the loop (1-32)")
-    extend_measures: int = pydantic.Field(default=0, description="Number of extra measures to add (or subtract) from the loop (default: 0)")
+    extend_measures: int = pydantic.Field(
+        default=0, description="Number of extra measures to add (or subtract) from the loop (default: 0)"
+    )
 
 
 class ChatHistoryResponse(pydantic.BaseModel):
@@ -70,7 +72,9 @@ class PatchLoopRequest(pydantic.BaseModel):
     """Request model for updating a loop."""
 
     offset: int | None = pydantic.Field(None, ge=0, description="Position offset in measures (optional)")
-    extend_measures: int | None = pydantic.Field(None, description="Number of extra measures to add (or subtract) from the loop (optional)")
+    extend_measures: int | None = pydantic.Field(
+        None, description="Number of extra measures to add (or subtract) from the loop (optional)"
+    )
     track_id: str | None = pydantic.Field(None, description="ID of the parent track (optional)")
 
     model_config = ConfigDict(from_attributes=True)

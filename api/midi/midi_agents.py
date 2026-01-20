@@ -5,11 +5,9 @@ Docs: https://docs.wandb.ai/weave/guides/core-types/models
 
 import logging
 import os
-from types import TracebackType
-from typing import TYPE_CHECKING, Optional, TypedDict, cast
+from typing import TypedDict, cast
 from uuid import UUID, uuid4
 
-import httpx
 import pydantic
 import weave
 from anthropic import AsyncAnthropic
@@ -26,14 +24,16 @@ from api.chats import chat_models
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
 from api.database import SessionLocal
+from api.instruments.instrument_constants import INSTRUMENT_TYPES
 from api.instruments.instrument_types import InstrumentType
-from api.loops import loop_utils, loop_models
+from api.loops import loop_models, loop_utils
 from api.midi import midi_evals, midi_models, midi_utils
 from api.midi.midi_types import MidiEventType
+from api.songs.song_constants import KEYS, TIME_SIGNATURES
 from api.songs.song_types import Key, TimeSignature
 
-
-DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
+# DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
+DEFAULT_MODEL_NAME: ModelName = "claude-opus-4-5"
 MAX_ATTEMPTS = 3
 
 log = logging.getLogger(__name__)
@@ -73,11 +73,11 @@ GenerateMidiCallResponse = tuple["GenerateMidiResponse", Call]
 _MODEL_CACHE: dict[ModelName, "_GenerateMidi"] = {}
 
 
-def get_model(model_name: ModelName) -> "_GenerateMidi":
+def get_model(model_name: ModelName, system_prompt: str = SYSTEM_PROMPT) -> "_GenerateMidi":
     """Get a client for the GenerateMidi model."""
     global _MODEL_CACHE
     if not _MODEL_CACHE.get(model_name):
-        _MODEL_CACHE[model_name] = _GenerateMidi(model_name=model_name, system_prompt=SYSTEM_PROMPT)
+        _MODEL_CACHE[model_name] = _GenerateMidi(model_name=model_name, system_prompt=system_prompt)
     return _MODEL_CACHE[model_name]
 
 
@@ -105,11 +105,12 @@ async def generate_midi_for_loop(
     chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
     chat_history.append(ChatMessage(role="user", content=user_prompt))
 
-    model = get_model(model_name)
+    model = get_model(model_name, SYSTEM_PROMPT)
 
     for n in range(MAX_ATTEMPTS):
         try:
-            response = await model.invoke(
+            response: tuple[GenerateMidiResponse, Call] = await model.invoke.call(
+                model,
                 chat_history=chat_history,
                 expect_time_signature=expect_time_signature,
                 expect_bpm=expect_bpm,
@@ -117,69 +118,36 @@ async def generate_midi_for_loop(
                 expect_measures=expect_measures,
                 expect_instrument=expect_instrument,
             )
+            result, call = response
+            score_result: ApplyScorerResult = await call.apply_scorer(
+                midi_evals.evaluate_midi_events,
+                additional_scorer_kwargs={
+                    "expect_measures": expect_measures,
+                    "expect_time_signature": expect_time_signature,
+                },
+            )
+            score: midi_evals.EvalResult = score_result.result
+            if not score.get("ok") or score.get("error"):
+                raise ValueError(
+                    f"The generated MIDI events failed evaluation, please fix and try again: {score.get('error', 'Unknown error')}"
+                )
             return update_loop(
                 user_id=user_id,
                 loop_id=loop_id,
                 user_prompt=user_prompt,
-                agent_description=response.description,
-                midi_events=response.to_midi_events(),
+                agent_description=result.description,
+                midi_events=result.to_midi_events(),
             )
         except Exception as e:
             chat_history.append(
                 ChatMessage(role="user", content=f"Previous attempt failed, please fix the error and try again: {e}")
             )
             log.exception(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {e}")
+            call.feedback.add_reaction("👎")
 
     raise HTTPException(
         status_code=500, detail=f"Failed to generate valid MIDI after {MAX_ATTEMPTS} attempts. Please try again."
     )
-
-
-@weave.op()
-async def generate_midi(
-    model_name: "ModelName",
-    chat_history: ChatHistory | WeaveList,
-    *,
-    expect_time_signature: TimeSignature,
-    expect_bpm: int,
-    expect_key: Key,
-    expect_measures: int,
-    expect_instrument: InstrumentType,
-) -> GenerateMidiCallResponse:
-    """
-    Run inference to generate MIDI events using the given model and chat history.
-    Injects a constraint to restrict the number of measures generated.
-    """
-    if not chat_history:
-        log.error("No chat history provided")
-        raise HTTPException(status_code=500)
-
-    # Hack: During evals, chat_history is replaced by an immutable WeaveList which must be unwrapped back to a mutable list
-    if isinstance(chat_history, WeaveList):
-        chat_history = chat_history.unwrap()
-
-    # Inject a constraint for the number of measures
-    user_content = chat_history[-1]["content"]
-    patched_user_content = (
-        f"{user_content}\nIMPORTANT: You *must* generate exactly {expect_measures} measures of MIDI events in "
-        f"{expect_time_signature} at {expect_bpm} BPM in the key of {expect_key} for {expect_instrument}."
-        "Remember that each note-on event must have a corresponding note-off event (value=0)."
-    )
-    chat_history[-1]["content"] = patched_user_content
-
-    # Get provider from the map (returns tuple of (provider, model_name))
-    provider, _ = MODEL_PROVIDER_MAP[model_name]
-
-    if provider == "openai":
-        log.debug(f"Generating MIDI with OpenAI model: {model_name}")
-        return await _generate_midi_openai.call(model_name, chat_history)  # type: ignore [no-any-return]
-
-    elif provider == "anthropic":
-        log.debug(f"Generating MIDI with Anthropic model: {model_name}")
-        return await _generate_midi_anthropic.call(model_name, chat_history)  # type: ignore [no-any-return]
-
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
 
 
 class _GenerateMidi(weave.Model):
@@ -197,54 +165,41 @@ class _GenerateMidi(weave.Model):
     async def invoke(
         self,
         *,
-        chat_history: str,
+        chat_history: ChatHistory | WeaveList,
         expect_time_signature: TimeSignature,
         expect_bpm: int,
         expect_key: Key,
         expect_measures: int,
         expect_instrument: InstrumentType,
     ) -> "GenerateMidiResponse":
-        """Generate MIDI events from a user prompt and save to database."""
-        try:
-            result: GenerateMidiCallResponse = await generate_midi(
-                self.model_name,
-                chat_history,
-                expect_time_signature=expect_time_signature,
-                expect_bpm=expect_bpm,
-                expect_key=expect_key,
-                expect_measures=expect_measures,
-                expect_instrument=expect_instrument,
-            )
+        """
+        Run inference to generate MIDI events using the given model and chat history.
+        Injects a constraint to restrict the number of measures generated.
+        """
+        # Hack: During evals, chat_history is replaced by an immutable WeaveList which must be unwrapped back to a mutable list
+        if isinstance(chat_history, WeaveList):
+            chat_history = chat_history.unwrap()
 
-            if not result or not result[0]:
-                raise ValueError("Empty response from model.")
+        # Inject a constraint for the number of measures
+        user_content = chat_history[-1]["content"]
+        patched_user_content = (
+            f"{user_content}\nIMPORTANT: You *must* generate exactly {expect_measures} measures of MIDI events in "
+            f"{expect_time_signature} at {expect_bpm} BPM in the key of {expect_key} for {expect_instrument}."
+            "Remember that each note-on event must have a corresponding note-off event (value=0)."
+        )
+        chat_history[-1]["content"] = patched_user_content
 
-            midi_events, call = result
+        # Get provider from the map (returns tuple of (provider, model_name))
+        provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
-            score_result: ApplyScorerResult = await call.apply_scorer(
-                midi_evals.evaluate_midi_events,
-                additional_scorer_kwargs={
-                    "expect_measures": expect_measures,
-                    "expect_time_signature": expect_time_signature,
-                },
-            )
-            score: midi_evals.EvalResult = score_result.result
+        if provider == "openai":
+            return await _generate_midi_openai(self.model_name, chat_history)
 
-            if not score.get("ok") or score.get("error"):
-                raise ValueError(
-                    f"The generated MIDI events failed evaluation, please fix and try again: {score.get('error', 'Unknown error')}"
-                )
+        elif provider == "anthropic":
+            return await _generate_midi_anthropic(self.model_name, chat_history)
 
-            # Success!
-            return midi_events
-
-        except pydantic.ValidationError as e:
-            raise ValueError(
-                f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
-            ) from e
-
-        except Exception as e:
-            raise ValueError(f"Unexpected error: {e}") from e
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
 
 
 def update_loop(
@@ -442,7 +397,7 @@ async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHi
         model=model_name,
         max_tokens=4096,
         betas=["structured-outputs-2025-11-13"],
-        system=system_prompt or SYSTEM_PROMPT,
+        system=system_prompt or SYSTEM_PROMPT.format(),
         messages=messages,
         output_format=GenerateMidiResponse,
     )
@@ -484,32 +439,52 @@ if __name__ == "__main__":
     weave.init(os.environ["PROJECT_ID"])
 
     parser = argparse.ArgumentParser(description="Generate MIDI events using LLM with chat history")
-    parser.add_argument("--prompt", "-p", required=True, help="User prompt for MIDI generation")
-    parser.add_argument("--user-id", type=UUID, help="Optional User ID (UUID)")
-    parser.add_argument("--track-id", type=UUID, help="Optional Track ID (UUID)")
-    parser.add_argument("--loop-id", type=UUID, help="Optional Loop ID (UUID)")
+    parser.add_argument(nargs=1, dest="prompt", help="User prompt for MIDI generation")
     parser.add_argument("--system-prompt", "-s", default=SYSTEM_PROMPT, help="System prompt")
-    parser.add_argument("--num-measures", "-n", type=int, default=1, help="Number of measures to generate")
     parser.add_argument("--model", "-m", default=DEFAULT_MODEL_NAME, help="Model name")
+    parser.add_argument("--num-measures", "-n", type=int, default=1, help="Number of measures to generate")
+    parser.add_argument("--time-signature", "-t", choices=TIME_SIGNATURES, default="4/4", help="Time signature")
+    parser.add_argument("--key", "-k", choices=KEYS, default="C", help="Musical key")
+    parser.add_argument("--bpm", "-b", type=int, default=120, help="Tempo in BPM")
+    parser.add_argument("--instrument", "-i", choices=INSTRUMENT_TYPES, default="piano", help="Instrument style")
     args = parser.parse_args()
 
     # Create model instance
-    model = _GenerateMidi(model_name=args.model, system_prompt=args.system_prompt)
-    chat_history = load_chat_history(user_id=None, loop_id=None, system_prompt=SYSTEM_PROMPT)
+    model = get_model(args.model, args.system_prompt)
+    chat_history = load_chat_history(user_id=None, loop_id=None, system_prompt=model.system_prompt)
     chat_history.append(ChatMessage(role="user", content=args.prompt))
 
     # Run async invoke
     async def main() -> None:
         try:
-            response, _ = await generate_midi(
-                model_name=args.model,
-                expect_measures=args.num_measures,
+            response: tuple[GenerateMidiResponse, Call] = await model.invoke.call(
+                model,
                 chat_history=chat_history,
+                expect_time_signature=args.time_signature,
+                expect_bpm=args.bpm,
+                expect_key=args.key,
+                expect_measures=args.num_measures,
+                expect_instrument=args.instrument,
             )
-            midi_events = response.to_midi_events()
-            print(json.dumps(midi_events, indent=2))
+            result, call = response
+            score_result: ApplyScorerResult = await call.apply_scorer(
+                midi_evals.evaluate_midi_events,
+                additional_scorer_kwargs={
+                    "expect_measures": args.num_measures,
+                    "expect_time_signature": args.time_signature,
+                },
+            )
+            score: midi_evals.EvalResult = score_result.result
+            if not score.get("ok") or score.get("error"):
+                raise ValueError(
+                    f"The generated MIDI events failed evaluation, please fix and try again: {score.get('error', 'Unknown error')}"
+                )
+            midi_events = result.to_midi_events()
+            midi_json = [event.model_dump() for event in midi_events]
+            sys.stdout.write(json.dumps(midi_json, indent=2))
+            sys.stdout.write("\n")
         except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
+            sys.stderr.write(f"Error: {e}\n")
             sys.exit(1)
 
     asyncio.run(main())

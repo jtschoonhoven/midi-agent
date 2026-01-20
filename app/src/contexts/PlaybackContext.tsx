@@ -364,7 +364,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // Check if instrument type has changed for this channel
       const existingInstrumentType = synthsInstrumentRef.current.get(channel);
       if (existingInstrumentType && existingInstrumentType !== instrumentType) {
-        console.log(`Instrument changed from ${existingInstrumentType} to ${instrumentType} on channel ${channel}, recreating...`);
+        console.log(
+          `Instrument changed from ${existingInstrumentType} to ${instrumentType} on channel ${channel}, recreating...`
+        );
         // Dispose old sampler/player
         const oldInstrument = synthsRef.current.get(channel);
         if (oldInstrument && oldInstrument.dispose) {

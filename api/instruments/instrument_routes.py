@@ -15,5 +15,7 @@ async def list_instruments() -> "instrument_schemas.ListInstrumentsResponse":
     List all instrument samples in the public/instruments folder.
     """
     with SessionLocal() as db:
-        instruments = db.query(instrument_models.Instrument).options(joinedload(instrument_models.Instrument.samples)).all()
+        instruments = (
+            db.query(instrument_models.Instrument).options(joinedload(instrument_models.Instrument.samples)).all()
+        )
         return instrument_schemas.ListInstrumentsResponse(instruments=[inst.to_response() for inst in instruments])

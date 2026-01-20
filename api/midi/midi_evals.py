@@ -1,12 +1,9 @@
 import logging
 import random
 from collections import defaultdict
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, TypedDict, Union
+from typing import TYPE_CHECKING, Optional, TypedDict, Union
 
 import weave
-from weave import ObjectRef
-from weave.trace.call import Call
 
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
@@ -17,7 +14,7 @@ from api.songs.song_constants import ADJECTIVES, NOUNS, TIME_SIGNATURE_BEATS_PER
 from api.songs.song_types import Key, TimeSignature
 
 if TYPE_CHECKING:
-    from api.midi.midi_agents import GenerateMidiResponse
+    pass
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +107,7 @@ class EvalResult(TypedDict):
 def evaluate_midi_events(
     expect_measures: int,
     expect_time_signature: TimeSignature,
-    output: Union["midi_agents.GenerateMidiResponse"],
+    output: Optional["midi_agents.GenerateMidiResponse"],
 ) -> EvalResult:
     """
     Check that MIDI events are well-formed.
@@ -125,6 +122,9 @@ def evaluate_midi_events(
     note_counts: dict[str, int] = defaultdict(lambda: 0)
 
     try:
+        if output is None:
+            raise AssertionError("Invalid MIDI")
+
         for index, event in enumerate(output.to_midi_events()):
             # Validate measures
             if event.measure > expect_measures:
@@ -192,12 +192,16 @@ if __name__ == "__main__":
     ALL_MODELS = MODEL_PROVIDER_MAP.keys()
 
     parser = argparse.ArgumentParser(description="Compare midi generation models")
-    parser.add_argument("--trials", "-t", type=int, default=3, help="Trials per model (optional)")
-    parser.add_argument("--models", "-m", nargs="+", choices=ALL_MODELS, default=ALL_MODELS, help="Models (optional)")
-    parser.add_argument("--system-prompt", "-s", default=midi_agents.SYSTEM_PROMPT, help="System prompt (optional)")
+    parser.add_argument("--trials", "-t", type=int, default=3)
+    parser.add_argument("--models", "-m", nargs="+", choices=ALL_MODELS, default=ALL_MODELS)
+    parser.add_argument("--system-prompt", "-s", default=midi_agents.SYSTEM_PROMPT)
     args = parser.parse_args()
 
-    async def evaluate() -> None:
+    # Get or create the published evaluation
+    try:
+        eval_name = "generate_midi_eval"
+        eval: weave.Evaluation = weave.ref(eval_name).get()
+    except ValueError:
         eval = weave.Evaluation(
             name="generate_midi",
             dataset=get_dataset(args.system_prompt),  # type: ignore [arg-type]
@@ -205,13 +209,13 @@ if __name__ == "__main__":
             trials=args.trials,
             evaluation_name=f"{random.choice(ADJECTIVES).lower()}-{random.choice(NOUNS).lower()}",
         )
+        weave.publish(eval, eval_name)
 
+    async def evaluate() -> None:
         tasks = []
-
         for model_name in args.models:
-            model = midi_agents.get_model(model_name)
+            model = midi_agents.get_model(model_name, args.system_prompt)
             tasks.append(eval.evaluate(model, __weave={"display_name": model_name}))
-
         await asyncio.gather(*tasks)
 
     asyncio.run(evaluate())

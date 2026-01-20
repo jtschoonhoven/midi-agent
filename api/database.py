@@ -13,6 +13,7 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},  # Needed for SQLite
     echo=False,  # Set to True for SQL query logging
+    pool_pre_ping=True,  # Verify connections before using them
 )
 
 # Create session factory

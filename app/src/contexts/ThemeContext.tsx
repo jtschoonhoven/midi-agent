@@ -37,11 +37,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeModeState(null);
   };
 
-  return (
-    <ThemeContext.Provider value={{ themeMode, setThemeMode, clearThemeMode }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ themeMode, setThemeMode, clearThemeMode }}>{children}</ThemeContext.Provider>;
 }
 
 export function useThemeMode() {

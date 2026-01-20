@@ -1,6 +1,5 @@
 """FastAPI routes for MIDI loops."""
 
-from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -196,9 +195,9 @@ async def download_loop_wav(
     try:
         wav_buffer = track_utils.render_loop_to_wav(db, loop, track, song)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to render loop: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to render loop: {str(e)}") from e
 
     # Generate filename
     filename = f"loop_{loop_id[:8]}.wav"

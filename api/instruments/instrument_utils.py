@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from fastapi import HTTPException
-
 from api.database import SessionLocal
 from api.instruments import instrument_models
 from api.instruments.instrument_constants import INSTRUMENT_DIR_TO_METADATA

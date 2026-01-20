@@ -11,7 +11,7 @@ from api.database import Base
 from api.instruments.instrument_constants import INSTRUMENT_TYPES
 from api.instruments.instrument_types import InstrumentType
 from api.tracks import track_schemas
-from api.tracks.track_constants import DEFAULT_TRACK_COLOR, TRACK_COLORS
+from api.tracks.track_constants import DEFAULT_TRACK_COLOR
 from api.tracks.track_types import TrackColor
 
 if TYPE_CHECKING:

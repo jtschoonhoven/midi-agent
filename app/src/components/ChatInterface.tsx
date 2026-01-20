@@ -86,9 +86,8 @@ type ChatMessage = components["schemas"]["ChatMessageResponse"];
 type CreateSongRequest = components["schemas"]["CreateSongRequest"];
 
 // Extract key enum values from OpenAPI schema
-const SONG_KEYS = (
-  (openApiSchema as any).components.schemas.CreateSongRequest.properties.key.enum as CreateSongRequest["key"][]
-);
+const SONG_KEYS = (openApiSchema as any).components.schemas.CreateSongRequest.properties.key
+  .enum as CreateSongRequest["key"][];
 
 export default function ChatInterface() {
   const {
@@ -111,9 +110,7 @@ export default function ChatInterface() {
   const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
 
   // Determine the actual active theme (user selection or system default)
-  const activeTheme = themeMode === null
-    ? (prefersDarkMode ? "dark" : "light")
-    : themeMode;
+  const activeTheme = themeMode === null ? (prefersDarkMode ? "dark" : "light") : themeMode;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -305,7 +302,14 @@ export default function ChatInterface() {
     return () => {
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizingLoop, resizingLoopId, resizeCurrentExtendMeasures, resizeStartExtendMeasures, songDetail, selectedSongId]);
+  }, [
+    isResizingLoop,
+    resizingLoopId,
+    resizeCurrentExtendMeasures,
+    resizeStartExtendMeasures,
+    songDetail,
+    selectedSongId,
+  ]);
 
   // Global keyboard handler for space bar to toggle playback
   useEffect(() => {
@@ -314,10 +318,7 @@ export default function ChatInterface() {
       if (e.code === "Space" || e.key === " ") {
         // Check if the target is a text input element
         const target = e.target as HTMLElement;
-        const isTextInput =
-          target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable;
+        const isTextInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 
         // If not in a text input, toggle playback
         if (!isTextInput) {
@@ -333,15 +334,20 @@ export default function ChatInterface() {
     };
   }, [togglePlayPause]);
 
-  // Focus the prompt input when the loop modal opens
+  // Focus the prompt input when the loop modal opens or when switching to chat tab
   useEffect(() => {
     if (showLoopModal && loopPromptInputRef.current) {
-      // Use a small timeout to ensure the modal is fully rendered
-      setTimeout(() => {
-        loopPromptInputRef.current?.focus();
-      }, 100);
+      // Only focus if we're in create mode or on the chat tab in edit mode
+      const shouldFocus = loopModalMode === "create" || (loopModalMode === "edit" && activeTab === 0);
+
+      if (shouldFocus) {
+        // Use a small timeout to ensure the modal/tab is fully rendered
+        setTimeout(() => {
+          loopPromptInputRef.current?.focus();
+        }, 150);
+      }
     }
-  }, [showLoopModal]);
+  }, [showLoopModal, loopModalMode, activeTab]);
 
   // Create a new song
   const handleCreateSong = async () => {
@@ -426,13 +432,13 @@ export default function ChatInterface() {
     const pollInterval = 1000; // 1 second between polls
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
 
       try {
         const result = await getLoop(loopId);
         if (result.data && result.data.midi_events.length > 0) {
           // Loop has MIDI events now - it's done generating
-          setGeneratingLoops(prev => {
+          setGeneratingLoops((prev) => {
             const next = new Set(prev);
             next.delete(loopId);
             return next;
@@ -453,7 +459,7 @@ export default function ChatInterface() {
     }
 
     // Timeout - remove from generating set
-    setGeneratingLoops(prev => {
+    setGeneratingLoops((prev) => {
       const next = new Set(prev);
       next.delete(loopId);
       return next;
@@ -518,7 +524,7 @@ export default function ChatInterface() {
         setIsCreatingLoop(false);
 
         // Step 4: Mark loop as generating and start chat in background
-        setGeneratingLoops(prev => new Set(prev).add(newLoop.id));
+        setGeneratingLoops((prev) => new Set(prev).add(newLoop.id));
 
         // Start background generation (don't await)
         (async () => {
@@ -533,7 +539,7 @@ export default function ChatInterface() {
             await pollLoopUpdates(newLoop.id);
           } catch (error) {
             console.error("Failed to generate loop:", error);
-            setGeneratingLoops(prev => {
+            setGeneratingLoops((prev) => {
               const next = new Set(prev);
               next.delete(newLoop.id);
               return next;
@@ -541,7 +547,6 @@ export default function ChatInterface() {
             alert("Failed to process prompt. Please try editing the loop to try again.");
           }
         })();
-
       } catch (error) {
         console.error("Failed to create loop:", error);
         alert("Failed to create loop. Please try again.");
@@ -794,11 +799,7 @@ export default function ChatInterface() {
   };
 
   // Handle loop drop to update offset
-  const handleLoopDrop = async (
-    loopId: string,
-    dropMeasure: number,
-    dragItem: DragItem
-  ) => {
+  const handleLoopDrop = async (loopId: string, dropMeasure: number, dragItem: DragItem) => {
     try {
       // Calculate the actual new offset based on where the loop was grabbed
       const grabOffset = dragItem.dragGrabOffset || 0;
@@ -1357,7 +1358,11 @@ export default function ChatInterface() {
                             alignItems: "center",
                             justifyContent: "center",
                             fontWeight: "bold",
-                            color: isCurrentMeasure ? "primary.main" : isInLoopZone ? "secondary.main" : "text.secondary",
+                            color: isCurrentMeasure
+                              ? "primary.main"
+                              : isInLoopZone
+                                ? "secondary.main"
+                                : "text.secondary",
                             fontSize: "0.875rem",
                             bgcolor: isCurrentMeasure
                               ? "primary.light"
@@ -1367,7 +1372,11 @@ export default function ChatInterface() {
                             transition: "background-color 0.1s, color 0.1s",
                             cursor: "pointer",
                             "&:hover": {
-                              bgcolor: isCurrentMeasure ? "primary.light" : isInLoopZone ? "secondary.main" : "action.hover",
+                              bgcolor: isCurrentMeasure
+                                ? "primary.light"
+                                : isInLoopZone
+                                  ? "secondary.main"
+                                  : "action.hover",
                             },
                           }}
                         >
@@ -1452,7 +1461,9 @@ export default function ChatInterface() {
                           const isCurrentMeasure = measureIndex === currentMeasure;
 
                           // Find the loop being resized if any
-                          const resizingLoop = isResizingLoop ? track.loops?.find(l => l.id === resizingLoopId) : null;
+                          const resizingLoop = isResizingLoop
+                            ? track.loops?.find((l) => l.id === resizingLoopId)
+                            : null;
 
                           return (
                             <Box
@@ -1504,9 +1515,10 @@ export default function ChatInterface() {
 
                         // Calculate width including extend_measures
                         // Use current resize value if this loop is being resized
-                        const currentExtendMeasures = (isResizingLoop && resizingLoopId === loop.id)
-                          ? resizeCurrentExtendMeasures
-                          : loop.extend_measures;
+                        const currentExtendMeasures =
+                          isResizingLoop && resizingLoopId === loop.id
+                            ? resizeCurrentExtendMeasures
+                            : loop.extend_measures;
                         const totalMeasures = loop.measures + currentExtendMeasures;
                         const width = totalMeasures * MEASURE_WIDTH;
 
@@ -1564,9 +1576,12 @@ export default function ChatInterface() {
                                 borderLeftColor: `${track.color}.main`,
                                 pointerEvents: isDragging || isBeingResized ? "none" : "auto",
                                 opacity: isDragging ? 0.5 : 1,
-                                "&:hover": isGenerating || isPlaying ? {} : {
-                                  borderColor: "text.primary",
-                                },
+                                "&:hover":
+                                  isGenerating || isPlaying
+                                    ? {}
+                                    : {
+                                        borderColor: "text.primary",
+                                      },
                               }}
                               onClick={isGenerating || isBeingResized ? undefined : () => handleOpenEditLoopModal(loop)}
                             >
@@ -1580,12 +1595,13 @@ export default function ChatInterface() {
                                   </Stack>
                                 ) : (
                                   <>
-                                    <Typography variant="subtitle2">
-                                      Loop {index + 1}
-                                    </Typography>
+                                    <Typography variant="subtitle2">Loop {index + 1}</Typography>
                                     {currentExtendMeasures !== 0 && (
                                       <Typography variant="caption" color="text.secondary">
-                                        {currentExtendMeasures > 0 ? `+${currentExtendMeasures}` : currentExtendMeasures} measures
+                                        {currentExtendMeasures > 0
+                                          ? `+${currentExtendMeasures}`
+                                          : currentExtendMeasures}{" "}
+                                        measures
                                       </Typography>
                                     )}
                                   </>
