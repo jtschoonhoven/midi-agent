@@ -175,9 +175,9 @@ async def create_song(
 
         # Create three default tracks: piano, bass, drums
         tracks_config = [
-            {"title": "Piano", "midi_channel": 1, "instrument": "piano"},
-            {"title": "Bass", "midi_channel": 2, "instrument": "bass"},
-            {"title": "Drums", "midi_channel": 10, "instrument": "drum"},
+            {"title": "Piano", "midi_channel": 1, "instrument": "piano", "color": "primary"},
+            {"title": "Bass", "midi_channel": 2, "instrument": "bass", "color": "secondary"},
+            {"title": "Drums", "midi_channel": 10, "instrument": "drum", "color": "warning"},
         ]
 
         for config in tracks_config:
@@ -186,6 +186,7 @@ async def create_song(
                 title=config["title"],
                 midi_channel=config["midi_channel"],
                 instrument=config["instrument"],
+                color=config["color"],
             )
             db.add(track)
 

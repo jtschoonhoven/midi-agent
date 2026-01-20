@@ -11,6 +11,8 @@ from api.database import Base
 from api.instruments.instrument_constants import INSTRUMENT_TYPES
 from api.instruments.instrument_types import InstrumentType
 from api.tracks import track_schemas
+from api.tracks.track_constants import DEFAULT_TRACK_COLOR, TRACK_COLORS
+from api.tracks.track_types import TrackColor
 
 if TYPE_CHECKING:
     from api.loops.loop_models import MidiLoop
@@ -30,6 +32,7 @@ class MidiTrack(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     midi_channel: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     instrument: Mapped[InstrumentType] = mapped_column(Enum(*INSTRUMENT_TYPES), default=DEFAULT_INST, nullable=False)
+    color: Mapped[TrackColor] = mapped_column(String(50), default=DEFAULT_TRACK_COLOR, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -51,6 +54,7 @@ class MidiTrack(Base):
             title=self.title,
             midi_channel=self.midi_channel,
             instrument=self.instrument,
+            color=self.color,
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
         )
@@ -62,6 +66,7 @@ class MidiTrack(Base):
             title=self.title,
             midi_channel=self.midi_channel,
             instrument=self.instrument,
+            color=self.color,
             loops=[loop.to_response() for loop in self.loops],
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),

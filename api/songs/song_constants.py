@@ -396,7 +396,7 @@ NOUNS: list[str] = [
     "Unfolding",
     "Union",
     "Unity",
-    "Untamed",
+    "Unicorn",
     "Veil",
     "Velvet",
     "Vibration",

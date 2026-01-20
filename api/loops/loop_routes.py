@@ -142,11 +142,11 @@ async def append_chat(
 
     track = loop.track
     song = track.song
-    agent = midi_agents.get_agent()
 
-    loop: loop_models.MidiLoop = await agent.invoke(  # type: ignore [no-redef]
+    loop = await midi_agents.generate_midi_for_loop(
         user_id=user_id,
         loop_id=loop.id,
+        model_name=midi_agents.DEFAULT_MODEL_NAME,
         user_prompt=request.msg,
         expect_time_signature=song.time_signature,
         expect_bpm=song.bpm,

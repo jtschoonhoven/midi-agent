@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api import auth, database
 from api.songs import song_utils
 from api.tracks import track_models, track_schemas, track_utils
+from api.tracks.track_constants import TRACK_COLORS
 
 router = APIRouter(prefix="/api/midi", tags=["tracks"])
 
@@ -23,6 +24,8 @@ async def create_track(
 
     The MIDI channel is automatically assigned as the next available channel
     based on existing tracks in the song (max channel + 1).
+
+    The track color is automatically assigned cyclically from the color palette.
     """
     try:
         # Validate that the song exists and belongs to the user
@@ -46,11 +49,16 @@ async def create_track(
         if next_channel > 16:
             raise HTTPException(status_code=400, detail="Maximum number of tracks (16) reached for this song")
 
+        # Assign color cyclically based on track count
+        track_count = len(existing_tracks)
+        assigned_color = TRACK_COLORS[track_count % len(TRACK_COLORS)]
+
         # Create new track
         new_track = track_models.MidiTrack(
             song_id=request.song_id,
             title=request.title,
             midi_channel=next_channel,
+            color=assigned_color,
         )
         db.add(new_track)
         db.commit()
@@ -93,7 +101,7 @@ async def update_track(
     user_id: UUID = Depends(auth.get_current_user_id),
 ) -> "track_schemas.TrackResponse":
     """
-    Update a track's title, MIDI channel, and/or instrument.
+    Update a track's title, MIDI channel, instrument, and/or color.
     All fields are optional - only provided fields will be updated.
     """
     track = track_utils.get_track_for_user(db, user_id, track_id)
@@ -109,6 +117,9 @@ async def update_track(
 
     if request.instrument is not None:
         track.instrument = request.instrument
+
+    if request.color is not None:
+        track.color = request.color
 
     db.commit()
     db.refresh(track)

@@ -1,15 +1,19 @@
 import logging
+import random
 from collections import defaultdict
-from typing import TYPE_CHECKING, TypedDict
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypedDict, Union
 
 import weave
 from weave import ObjectRef
+from weave.trace.call import Call
 
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
+from api.instruments.instrument_types import InstrumentType
 from api.midi import midi_agents
 from api.midi.midi_constants import MIDI_EVENT_TO_HEX
-from api.songs.song_constants import TIME_SIGNATURE_BEATS_PER_MEASURE
+from api.songs.song_constants import ADJECTIVES, NOUNS, TIME_SIGNATURE_BEATS_PER_MEASURE
 from api.songs.song_types import Key, TimeSignature
 
 if TYPE_CHECKING:
@@ -20,40 +24,78 @@ log = logging.getLogger(__name__)
 
 class DatasetEntry(TypedDict):
     model_name: ModelName
-    expect_measures: int
     user_prompt: str
+    expect_measures: int
+    expect_time_signature: TimeSignature
+    expect_bpm: int
+    expect_key: Key
+    expect_instrument: InstrumentType
 
     @staticmethod  # type: ignore [misc]
-    def create(model_name: ModelName, expect_measures: int, user_prompt: str, system_prompt: str) -> "DatasetEntry":
+    def create(
+        *,
+        user_prompt: str,
+        system_prompt: str,
+        expect_measures: int,
+        expect_time_signature: TimeSignature,
+        expect_bpm: int,
+        expect_key: Key,
+        expect_instrument: InstrumentType,
+    ) -> "DatasetEntry":
         chat_history = midi_agents.load_chat_history(user_id=None, loop_id=None, system_prompt=system_prompt)
         chat_history.append(midi_agents.ChatMessage(role="user", content=user_prompt))
-        return DatasetEntry(model_name=model_name, expect_measures=expect_measures, chat_history=chat_history)
+        return DatasetEntry(
+            chat_history=chat_history,
+            expect_measures=expect_measures,
+            expect_time_signature=expect_time_signature,
+            expect_bpm=expect_bpm,
+            expect_key=expect_key,
+            expect_instrument=expect_instrument,
+        )
 
 
-def get_dataset(model_name: ModelName, system_prompt: str) -> list["DatasetEntry"]:
+def get_dataset(system_prompt: str) -> list["DatasetEntry"]:
     """
     Return an example dataset for evaluating the MIDI generation agent.
     """
 
     return [
         DatasetEntry.create(  # type: ignore [attr-defined]
-            model_name=model_name,
-            expect_measures=1,
-            user_prompt="Upbeat pop music in C major",
+            user_prompt="Edgy, modern pop melody",
             system_prompt=system_prompt,
+            expect_measures=2,
+            expect_time_signature="4/4",
+            expect_bpm=120,
+            expect_key="Dm",
+            expect_instrument="piano",
         ),
-        # DatasetEntry.create(
-        #     model_name=model_name,
-        #     expect_measures=2,
-        #     user_prompt="Sad waltz in D minor with a 3/4 time signature",
-        #     system_prompt=system_prompt,
-        # ),
-        # DatasetEntry.create(
-        #     model_name=model_name,
-        #     expect_measures=4,
-        #     user_prompt="Experimental jazz in Gm in 7/8 at 180 BPM",
-        #     system_prompt=system_prompt,
-        # ),
+        DatasetEntry.create(  # type: ignore [attr-defined]
+            user_prompt="Experimental funk drum pattern with a fill in the last measure",
+            system_prompt=system_prompt,
+            expect_measures=4,
+            expect_time_signature="5/4",
+            expect_bpm=160,
+            expect_key="G",
+            expect_instrument="drum",
+        ),
+        DatasetEntry.create(  # type: ignore [attr-defined]
+            user_prompt="Walking bass for a jazz standard",
+            system_prompt=system_prompt,
+            expect_measures=2,
+            expect_time_signature="4/4",
+            expect_bpm=120,
+            expect_key="Dm",
+            expect_instrument="piano",
+        ),
+        DatasetEntry.create(  # type: ignore [attr-defined]
+            user_prompt="Moody chords for a slow waltz",
+            system_prompt=system_prompt,
+            expect_measures=2,
+            expect_time_signature="3/4",
+            expect_bpm=90,
+            expect_key="Am",
+            expect_instrument="piano",
+        ),
     ]
 
 
@@ -68,15 +110,11 @@ class EvalResult(TypedDict):
 def evaluate_midi_events(
     expect_measures: int,
     expect_time_signature: TimeSignature,
-    output: "GenerateMidiResponse",
+    output: Union["midi_agents.GenerateMidiResponse"],
 ) -> EvalResult:
     """
     Check that MIDI events are well-formed.
     """
-    # Hack: manually resolve ObjectRefs to work around a bug in the weave SDK when running evals
-    if isinstance(expect_measures, ObjectRef):
-        expect_measures = expect_measures.get()
-
     # Hack: weave magically serializes pydantic models to dicts when running evals so we have to marshal back to the model type
     if isinstance(output, dict):
         output = midi_agents.GenerateMidiResponse.model_validate(output)
@@ -151,22 +189,29 @@ if __name__ == "__main__":
     load_dotenv()
     weave.init(os.environ["PROJECT_ID"])
 
-    all_models = MODEL_PROVIDER_MAP.keys()
+    ALL_MODELS = MODEL_PROVIDER_MAP.keys()
 
     parser = argparse.ArgumentParser(description="Compare midi generation models")
     parser.add_argument("--trials", "-t", type=int, default=3, help="Trials per model (optional)")
-    parser.add_argument("--models", "-m", nargs="+", choices=all_models, default=all_models, help="Models (optional)")
+    parser.add_argument("--models", "-m", nargs="+", choices=ALL_MODELS, default=ALL_MODELS, help="Models (optional)")
     parser.add_argument("--system-prompt", "-s", default=midi_agents.SYSTEM_PROMPT, help="System prompt (optional)")
     args = parser.parse_args()
 
     async def evaluate() -> None:
+        eval = weave.Evaluation(
+            name="generate_midi",
+            dataset=get_dataset(args.system_prompt),  # type: ignore [arg-type]
+            scorers=[evaluate_midi_events],
+            trials=args.trials,
+            evaluation_name=f"{random.choice(ADJECTIVES).lower()}-{random.choice(NOUNS).lower()}",
+        )
+
+        tasks = []
+
         for model_name in args.models:
-            eval = weave.Evaluation(
-                name="generate_midi",
-                dataset=get_dataset(model_name, args.system_prompt),  # type: ignore [arg-type]
-                scorers=[evaluate_midi_events],
-                trials=args.trials,
-            )
-            await eval.evaluate(midi_agents.generate_midi, __weave={"display_name": f"{eval.name}:{model_name}"})
+            model = midi_agents.get_model(model_name)
+            tasks.append(eval.evaluate(model, __weave={"display_name": model_name}))
+
+        await asyncio.gather(*tasks)
 
     asyncio.run(evaluate())

@@ -132,6 +132,9 @@ export default function ChatInterface() {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [isDeletingTrack, setIsDeletingTrack] = useState(false);
   const [editedTrackTitle, setEditedTrackTitle] = useState("");
+
+  // Refs
+  const loopPromptInputRef = useRef<HTMLInputElement>(null);
   const [editedTrackChannel, setEditedTrackChannel] = useState(1);
   const [editedTrackInstrument, setEditedTrackInstrument] = useState<"piano" | "bass" | "drum">("piano");
   const [isUpdatingTrack, setIsUpdatingTrack] = useState(false);
@@ -272,6 +275,16 @@ export default function ChatInterface() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [togglePlayPause]);
+
+  // Focus the prompt input when the loop modal opens
+  useEffect(() => {
+    if (showLoopModal && loopPromptInputRef.current) {
+      // Use a small timeout to ensure the modal is fully rendered
+      setTimeout(() => {
+        loopPromptInputRef.current?.focus();
+      }, 100);
+    }
+  }, [showLoopModal]);
 
   // Create a new song
   const handleCreateSong = async () => {
@@ -970,6 +983,8 @@ export default function ChatInterface() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    borderLeft: 4,
+                    borderLeftColor: `${track.color}.main`,
                     "&:hover": {
                       bgcolor: "action.hover",
                       boxShadow: 2,
@@ -1279,6 +1294,8 @@ export default function ChatInterface() {
                                 justifyContent: "center",
                                 border: 1,
                                 borderColor: "divider",
+                                borderLeft: 4,
+                                borderLeftColor: `${track.color}.main`,
                                 pointerEvents: isDragging ? "none" : "auto",
                                 opacity: isDragging ? 0.5 : 1,
                                 "&:hover": isGenerating || isPlaying ? {} : {
@@ -1469,12 +1486,22 @@ export default function ChatInterface() {
                   label="Musical Prompt"
                   value={loopPrompt}
                   onChange={(e) => setLoopPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Check for Command+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      if (loopPrompt.trim() && !isCreatingLoop) {
+                        handleSubmitLoop();
+                      }
+                    }
+                  }}
+                  inputRef={loopPromptInputRef}
                   fullWidth
                   required
                   multiline
                   rows={6}
                   placeholder="Describe what you want to create... (e.g., 'A funky bassline in C minor')"
-                  helperText="Enter a description of the loop you want to generate"
+                  helperText="Cmd+Enter to send"
                   disabled={isCreatingLoop}
                 />
               </Stack>
@@ -1526,10 +1553,21 @@ export default function ChatInterface() {
                       label="Add message"
                       value={loopPrompt}
                       onChange={(e) => setLoopPrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Check for Command+Enter (Mac) or Ctrl+Enter (Windows/Linux)
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          if (loopPrompt.trim() && !isCreatingLoop) {
+                            handleSubmitLoop();
+                          }
+                        }
+                      }}
+                      inputRef={loopPromptInputRef}
                       fullWidth
                       multiline
                       rows={3}
                       placeholder="Continue the conversation..."
+                      helperText="Cmd+Enter to send"
                       disabled={isCreatingLoop}
                     />
                   </Stack>

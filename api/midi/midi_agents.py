@@ -27,18 +27,14 @@ from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
 from api.database import SessionLocal
 from api.instruments.instrument_types import InstrumentType
-from api.loops import loop_utils
+from api.loops import loop_utils, loop_models
 from api.midi import midi_evals, midi_models, midi_utils
 from api.midi.midi_types import MidiEventType
 from api.songs.song_types import Key, TimeSignature
 
-if TYPE_CHECKING:
-    from api.loops.loop_models import MidiLoop
-
 
 DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
 MAX_ATTEMPTS = 3
-_CLIENT: Optional["_GenerateMidi"] = None
 
 log = logging.getLogger(__name__)
 
@@ -72,14 +68,71 @@ class ChatMessage(TypedDict):
 
 
 ChatHistory = list[ChatMessage]
+GenerateMidiCallResponse = tuple["GenerateMidiResponse", Call]
+
+_MODEL_CACHE: dict[ModelName, "_GenerateMidi"] = {}
 
 
-def get_agent() -> "_GenerateMidi":
+def get_model(model_name: ModelName) -> "_GenerateMidi":
     """Get a client for the GenerateMidi model."""
-    global _CLIENT
-    if _CLIENT is None:
-        _CLIENT = _GenerateMidi(model_name=DEFAULT_MODEL_NAME, system_prompt=SYSTEM_PROMPT)
-    return _CLIENT
+    global _MODEL_CACHE
+    if not _MODEL_CACHE.get(model_name):
+        _MODEL_CACHE[model_name] = _GenerateMidi(model_name=model_name, system_prompt=SYSTEM_PROMPT)
+    return _MODEL_CACHE[model_name]
+
+
+async def generate_midi_for_loop(
+    *,
+    user_id: str | UUID,
+    loop_id: str | UUID,
+    model_name: ModelName,
+    user_prompt: str,
+    expect_time_signature: TimeSignature,
+    expect_bpm: int,
+    expect_key: Key,
+    expect_measures: int,
+    expect_instrument: InstrumentType,
+) -> "loop_models.MidiLoop":
+    model_provider, _ = MODEL_PROVIDER_MAP[model_name]
+
+    # Check for required API keys
+    if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
+    if model_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
+        raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic models")
+
+    # Get the chat history and add the current prompt
+    chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
+    chat_history.append(ChatMessage(role="user", content=user_prompt))
+
+    model = get_model(model_name)
+
+    for n in range(MAX_ATTEMPTS):
+        try:
+            response = await model.invoke(
+                chat_history=chat_history,
+                expect_time_signature=expect_time_signature,
+                expect_bpm=expect_bpm,
+                expect_key=expect_key,
+                expect_measures=expect_measures,
+                expect_instrument=expect_instrument,
+            )
+            return update_loop(
+                user_id=user_id,
+                loop_id=loop_id,
+                user_prompt=user_prompt,
+                agent_description=response.description,
+                midi_events=response.to_midi_events(),
+            )
+        except Exception as e:
+            chat_history.append(
+                ChatMessage(role="user", content=f"Previous attempt failed, please fix the error and try again: {e}")
+            )
+            log.exception(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {e}")
+
+    raise HTTPException(
+        status_code=500, detail=f"Failed to generate valid MIDI after {MAX_ATTEMPTS} attempts. Please try again."
+    )
 
 
 @weave.op()
@@ -92,7 +145,7 @@ async def generate_midi(
     expect_key: Key,
     expect_measures: int,
     expect_instrument: InstrumentType,
-) -> tuple["GenerateMidiResponse", Call]:
+) -> GenerateMidiCallResponse:
     """
     Run inference to generate MIDI events using the given model and chat history.
     Injects a constraint to restrict the number of measures generated.
@@ -120,9 +173,11 @@ async def generate_midi(
     if provider == "openai":
         log.debug(f"Generating MIDI with OpenAI model: {model_name}")
         return await _generate_midi_openai.call(model_name, chat_history)  # type: ignore [no-any-return]
+
     elif provider == "anthropic":
         log.debug(f"Generating MIDI with Anthropic model: {model_name}")
         return await _generate_midi_anthropic.call(model_name, chat_history)  # type: ignore [no-any-return]
+
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
 
@@ -142,150 +197,103 @@ class _GenerateMidi(weave.Model):
     async def invoke(
         self,
         *,
-        user_id: UUID,
-        loop_id: UUID,
-        user_prompt: str,
+        chat_history: str,
         expect_time_signature: TimeSignature,
         expect_bpm: int,
         expect_key: Key,
         expect_measures: int,
         expect_instrument: InstrumentType,
-    ) -> "MidiLoop":
+    ) -> "GenerateMidiResponse":
         """Generate MIDI events from a user prompt and save to database."""
-        # Get provider and model name
-        model_provider, _ = MODEL_PROVIDER_MAP[self.model_name]
+        try:
+            result: GenerateMidiCallResponse = await generate_midi(
+                self.model_name,
+                chat_history,
+                expect_time_signature=expect_time_signature,
+                expect_bpm=expect_bpm,
+                expect_key=expect_key,
+                expect_measures=expect_measures,
+                expect_instrument=expect_instrument,
+            )
 
-        # Check for required API keys
-        if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
-        if model_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic models")
+            if not result or not result[0]:
+                raise ValueError("Empty response from model.")
 
-        # Get the chat history and add the current prompt
-        chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
-        chat_history.append(ChatMessage(role="user", content=user_prompt))
+            midi_events, call = result
 
-        for n in range(MAX_ATTEMPTS):
-            exc_info: tuple[type[BaseException], BaseException, TracebackType] | tuple[None, None, None] | None = None
-            error_msg = ""
+            score_result: ApplyScorerResult = await call.apply_scorer(
+                midi_evals.evaluate_midi_events,
+                additional_scorer_kwargs={
+                    "expect_measures": expect_measures,
+                    "expect_time_signature": expect_time_signature,
+                },
+            )
+            score: midi_evals.EvalResult = score_result.result
 
-            # Invoke agent and evaluate the response
-            try:
-                response, call = await generate_midi(
-                    self.model_name,
-                    chat_history,
-                    expect_time_signature=expect_time_signature,
-                    expect_bpm=expect_bpm,
-                    expect_key=expect_key,
-                    expect_measures=expect_measures,
-                    expect_instrument=expect_instrument,
+            if not score.get("ok") or score.get("error"):
+                raise ValueError(
+                    f"The generated MIDI events failed evaluation, please fix and try again: {score.get('error', 'Unknown error')}"
                 )
 
-                if not response:
-                    error_msg = "Empty response from model."
+            # Success!
+            return midi_events
 
-                else:
-                    score_result: ApplyScorerResult = await call.apply_scorer(
-                        midi_evals.evaluate_midi_events,
-                        additional_scorer_kwargs={
-                            "expect_measures": expect_measures,
-                            "expect_time_signature": expect_time_signature,
-                        },
-                    )
+        except pydantic.ValidationError as e:
+            raise ValueError(
+                f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
+            ) from e
 
-                    score: midi_evals.EvalResult = score_result.result
-                    if not score.get("ok") or score.get("error"):
-                        error_msg = f"The generated MIDI events failed validation, please fix and try again: {score.get('error', 'Unknown error')}"
+        except Exception as e:
+            raise ValueError(f"Unexpected error: {e}") from e
 
-                    else:
-                        # Success!
-                        log.info(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} succeeded")
-                        break
 
-                call.feedback.add_reaction("👎")
+def update_loop(
+    *,
+    user_id: str | UUID,
+    loop_id: str | UUID,
+    user_prompt: str,
+    agent_description: str,
+    midi_events: list[midi_models.MidiEvent],
+) -> "loop_models.MidiLoop":
+    """Save generated MIDI to database as a new loop with chat messages."""
+    with SessionLocal() as db:
+        loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
-            except pydantic.ValidationError as e:
-                exc_info = sys.exc_info()
-                error_msg = (
-                    f"The generated MIDI events failed validation: {e.errors(include_url=False, include_context=False)}"
-                )
+        if not loop:
+            raise HTTPException(status_code=404)
 
-            except AssertionError as e:
-                exc_info = sys.exc_info()
-                error_msg = f"The generated MIDI events failed evaluation: {e}"
+        # Update the loop with the new MIDI events
+        loop.measures = max(event.measure for event in midi_events)
+        loop.midi_events = [event.model_dump() for event in midi_events]
+        db.add(loop)
 
-            except Exception as e:
-                exc_info = sys.exc_info()
-                error_msg = f"Unexpected error: {e}"
-
-            log.error(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {error_msg}", exc_info=exc_info)
-            chat_history.append({"role": "user", "content": error_msg})
-
-        # Raise on failure after max attempts
-        if error_msg:
-            log.error(f"Failed to generate midi after {MAX_ATTEMPTS} attempts: {error_msg}", exc_info=exc_info)
-            raise HTTPException(status_code=500, detail="Failed to generate valid MIDI. Please try again.")
-
-        midi_events: list[midi_models.MidiEvent] = response.to_midi_events()
-
-        # Save to database: create new loop and chat messages
-        loop = self.update_loop(
-            user_id=user_id,
-            loop_id=loop_id,
-            user_prompt=user_prompt,
-            agent_description=response.description,
-            midi_events=midi_events,
+        # Add the user prompt to the chat history
+        message = chat_models.ChatMessage(
+            id=str(uuid4()),
+            role="user",
+            msg=user_prompt,
+            midi_events=None,
+            loop_id=loop.id,
         )
+        db.add(message)
+
+        # Add the assistant message to the chat history
+        assistant_message = chat_models.ChatMessage(
+            id=str(uuid4()),
+            role="assistant",
+            msg=agent_description,  # Use LLM-generated description
+            midi_events=[event.model_dump() for event in midi_events],
+            loop_id=loop.id,
+        )
+        db.add(assistant_message)
+
+        # Commit changes
+        db.commit()
+
+        # Refresh to eagerly load all relationships before closing session
+        db.refresh(loop)
+
         return loop
-
-    def update_loop(
-        self,
-        *,
-        user_id: UUID,
-        loop_id: UUID,
-        user_prompt: str,
-        agent_description: str,
-        midi_events: list[midi_models.MidiEvent],
-    ) -> "MidiLoop":
-        """Save generated MIDI to database as a new loop with chat messages."""
-        with SessionLocal() as db:
-            loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
-
-            if not loop:
-                raise HTTPException(status_code=404)
-
-            # Update the loop with the new MIDI events
-            loop.measures = max(event.measure for event in midi_events)
-            loop.midi_events = [event.model_dump() for event in midi_events]
-            db.add(loop)
-
-            # Add the user prompt to the chat history
-            message = chat_models.ChatMessage(
-                id=str(uuid4()),
-                role="user",
-                msg=user_prompt,
-                midi_events=None,
-                loop_id=loop.id,
-            )
-            db.add(message)
-
-            # Add the assistant message to the chat history
-            assistant_message = chat_models.ChatMessage(
-                id=str(uuid4()),
-                role="assistant",
-                msg=agent_description,  # Use LLM-generated description
-                midi_events=[event.model_dump() for event in midi_events],
-                loop_id=loop.id,
-            )
-            db.add(assistant_message)
-
-            # Commit changes
-            db.commit()
-
-            # Refresh to eagerly load all relationships before closing session
-            db.refresh(loop)
-
-            return loop
 
 
 class GeneratedMidiEvent(pydantic.BaseModel):
@@ -372,7 +380,7 @@ class GenerateMidiResponse(pydantic.BaseModel):
         return result
 
 
-def load_chat_history(*, user_id: UUID | None, loop_id: UUID | None, system_prompt: str) -> ChatHistory:
+def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None, system_prompt: str) -> ChatHistory:
     """
     Load chat history for the given loop (or just the system prompt if no loop ID is provided).
     """
@@ -430,30 +438,16 @@ async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHi
         else:
             raise HTTPException(status_code=400, detail=f"Unknown message role: {msg['role']}")
 
-    for n in range(MAX_ATTEMPTS):
-        try:
-            anthropic_response = await client.beta.messages.parse(
-                model=model_name,
-                max_tokens=4096,
-                betas=["structured-outputs-2025-11-13"],
-                system=system_prompt or SYSTEM_PROMPT,
-                messages=messages,
-                output_format=GenerateMidiResponse,
-            )
-            log.debug(f"Anthropic response: {anthropic_response.model_dump()}")
-            break
-        except pydantic.ValidationError as e:
-            err = f"The generated MIDI events failed validation, please fix and try again: {e.errors(include_url=False, include_context=False)}"
-            chat_history.append(ChatMessage(role="system", content=err))
-            log.exception(f"Anthropic generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {str(e)}")
-            log.debug(f"Anthropic response: {anthropic_response.model_dump()}")
-        except httpx.HTTPStatusError as e:
-            log.exception(f"Anthropic API error: {e}")
-        except Exception as e:
-            log.exception(f"Unexpected anthropic error: {e}")
+    anthropic_response = await client.beta.messages.parse(
+        model=model_name,
+        max_tokens=4096,
+        betas=["structured-outputs-2025-11-13"],
+        system=system_prompt or SYSTEM_PROMPT,
+        messages=messages,
+        output_format=GenerateMidiResponse,
+    )
 
     if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):
-        log.debug(f"Anthropic response: {anthropic_response.model_dump()}")
         raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")
 
     return anthropic_response.parsed_output
@@ -507,7 +501,7 @@ if __name__ == "__main__":
     # Run async invoke
     async def main() -> None:
         try:
-            response = await generate_midi(
+            response, _ = await generate_midi(
                 model_name=args.model,
                 expect_measures=args.num_measures,
                 chat_history=chat_history,
