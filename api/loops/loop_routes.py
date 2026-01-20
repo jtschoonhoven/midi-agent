@@ -1,14 +1,16 @@
 """FastAPI routes for MIDI loops."""
 
+from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from api import auth, database
 from api.loops import loop_models, loop_schemas, loop_utils
 from api.midi import midi_agents
-from api.tracks import track_utils
+from api.songs import song_models
+from api.tracks import track_models, track_utils
 
 router = APIRouter(prefix="/api/midi", tags=["loops"])
 
@@ -123,17 +125,34 @@ async def append_chat(
     user_id: UUID = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopDetailResponse:
     """Create a new user chat message for a loop."""
-    loop = loop_utils.get_loop_for_user(db, user_id, request.loop_id)
-
+    loop: loop_models.MidiLoop | None = (
+        db.query(loop_models.MidiLoop)
+        .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
+        .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
+        .options(
+            # Eager load related resources
+            joinedload(loop_models.MidiLoop.chat_messages),
+            joinedload(loop_models.MidiLoop.track).joinedload(track_models.MidiTrack.song),
+        )
+        .filter(loop_models.MidiLoop.id == str(request.loop_id), song_models.MidiSong.user_id == str(user_id))
+        .first()
+    )
     if not loop:
         raise HTTPException(status_code=404)
 
+    track = loop.track
+    song = track.song
     agent = midi_agents.get_agent()
-    loop: loop_models.MidiLoop = await agent.invoke(
+
+    loop: loop_models.MidiLoop = await agent.invoke(  # type: ignore [no-redef]
         user_id=user_id,
         loop_id=loop.id,
         user_prompt=request.msg,
+        expect_time_signature=song.time_signature,
+        expect_bpm=song.bpm,
+        expect_key=song.key,
         expect_measures=request.measures,
+        expect_instrument=loop.track.instrument,
     )
 
     return loop.to_detail_response()

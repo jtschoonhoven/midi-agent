@@ -2,7 +2,42 @@
 
 from api.songs.song_types import Key, TimeSignature
 
-KEYS: list[Key] = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+KEYS: list[Key] = [
+    "C",
+    "C#",
+    "Db",
+    "D",
+    "D#",
+    "Eb",
+    "E",
+    "F",
+    "F#",
+    "Gb",
+    "G",
+    "G#",
+    "Ab",
+    "A",
+    "A#",
+    "Bb",
+    "B",
+    "Cm",
+    "C#m",
+    "Dbm",
+    "Dm",
+    "D#m",
+    "Ebm",
+    "Em",
+    "Fm",
+    "F#m",
+    "Gbm",
+    "Gm",
+    "G#m",
+    "Abm",
+    "Am",
+    "A#m",
+    "Bbm",
+    "Bm",
+]
 TIME_SIGNATURES: list[TimeSignature] = ["3/4", "4/4", "5/4", "6/8", "7/8"]
 TIME_SIGNATURE_BEATS_PER_MEASURE: dict[TimeSignature, int] = {
     "3/4": 3,

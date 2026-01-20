@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING, TypedDict
 
@@ -8,9 +9,13 @@ from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
 from api.midi import midi_agents
 from api.midi.midi_constants import MIDI_EVENT_TO_HEX
+from api.songs.song_constants import TIME_SIGNATURE_BEATS_PER_MEASURE
+from api.songs.song_types import Key, TimeSignature
 
 if TYPE_CHECKING:
     from api.midi.midi_agents import GenerateMidiResponse
+
+log = logging.getLogger(__name__)
 
 
 class DatasetEntry(TypedDict):
@@ -18,7 +23,7 @@ class DatasetEntry(TypedDict):
     expect_measures: int
     user_prompt: str
 
-    @staticmethod
+    @staticmethod  # type: ignore [misc]
     def create(model_name: ModelName, expect_measures: int, user_prompt: str, system_prompt: str) -> "DatasetEntry":
         chat_history = midi_agents.load_chat_history(user_id=None, loop_id=None, system_prompt=system_prompt)
         chat_history.append(midi_agents.ChatMessage(role="user", content=user_prompt))
@@ -31,7 +36,7 @@ def get_dataset(model_name: ModelName, system_prompt: str) -> list["DatasetEntry
     """
 
     return [
-        DatasetEntry.create(
+        DatasetEntry.create(  # type: ignore [attr-defined]
             model_name=model_name,
             expect_measures=1,
             user_prompt="Upbeat pop music in C major",
@@ -60,7 +65,11 @@ class EvalResult(TypedDict):
 
 
 @weave.op
-def evaluate_midi_events(expect_measures: int, output: "GenerateMidiResponse") -> EvalResult:
+def evaluate_midi_events(
+    expect_measures: int,
+    expect_time_signature: TimeSignature,
+    output: "GenerateMidiResponse",
+) -> EvalResult:
     """
     Check that MIDI events are well-formed.
     """
@@ -72,6 +81,8 @@ def evaluate_midi_events(expect_measures: int, output: "GenerateMidiResponse") -
     if isinstance(output, dict):
         output = midi_agents.GenerateMidiResponse.model_validate(output)
 
+    beats_per_measure = TIME_SIGNATURE_BEATS_PER_MEASURE[expect_time_signature]
+
     # Group events by note (event name) and count note-on vs note-off
     note_counts: dict[str, int] = defaultdict(lambda: 0)
 
@@ -80,6 +91,12 @@ def evaluate_midi_events(expect_measures: int, output: "GenerateMidiResponse") -
             # Validate measures
             if event.measure > expect_measures:
                 raise AssertionError(f"Midi event at index {index} is outside the loop's length: {expect_measures}")
+
+            # Validate time signature
+            if event.beat > beats_per_measure:
+                raise AssertionError(
+                    f"Midi event at index {index} is outside the time signature: {expect_time_signature}"
+                )
 
             # Validate event type
             if event.event not in MIDI_EVENT_TO_HEX:
@@ -101,7 +118,11 @@ def evaluate_midi_events(expect_measures: int, output: "GenerateMidiResponse") -
                 raise AssertionError(f"Note off event at index {index} has no matching note on event")
 
     except AssertionError as e:
+        log.exception(f"Generated MIDI failed validation: {e}")
         return EvalResult(ok=False, error=str(e))
+    except Exception as e:
+        log.exception(f"Unexpected system error: {e}")
+        return EvalResult(ok=False, error="Unexpected system error")
 
     for note, count in note_counts.items():
         if count != 0:
@@ -142,7 +163,7 @@ if __name__ == "__main__":
         for model_name in args.models:
             eval = weave.Evaluation(
                 name="generate_midi",
-                dataset=get_dataset(model_name, args.system_prompt),
+                dataset=get_dataset(model_name, args.system_prompt),  # type: ignore [arg-type]
                 scorers=[evaluate_midi_events],
                 trials=args.trials,
             )

@@ -38,6 +38,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
+import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import {
   listSongs,
   createSong,
@@ -54,6 +55,7 @@ import {
 import { useDrag, useDrop } from "react-dnd";
 import { usePlayback } from "../contexts/PlaybackContext";
 import type { components } from "../types/api";
+import openApiSchema from "../types/openapi.json";
 
 type Song = components["schemas"]["SongResponse"];
 type SongDetail = components["schemas"]["SongDetailResponse"];
@@ -70,8 +72,15 @@ interface DragItem {
   trackId: string;
   currentOffset: number;
   measures: number;
+  dragGrabOffset?: number; // Which measure within the loop was grabbed (0 = first measure)
 }
 type ChatMessage = components["schemas"]["ChatMessageResponse"];
+type CreateSongRequest = components["schemas"]["CreateSongRequest"];
+
+// Extract key enum values from OpenAPI schema
+const SONG_KEYS = (
+  (openApiSchema as any).components.schemas.CreateSongRequest.properties.key.enum as CreateSongRequest["key"][]
+);
 
 export default function ChatInterface() {
   const {
@@ -79,6 +88,8 @@ export default function ChatInterface() {
     bpm,
     currentBeat,
     togglePlayPause,
+    stop,
+    playFromBeat,
     setBpm: setPlaybackBpm,
     loadSong,
     midiOutputs,
@@ -92,6 +103,9 @@ export default function ChatInterface() {
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [showNewSongModal, setShowNewSongModal] = useState(false);
   const [isCreatingSong, setIsCreatingSong] = useState(false);
+  const [newSongKey, setNewSongKey] = useState<CreateSongRequest["key"]>("C");
+  const [newSongTimeSignature, setNewSongTimeSignature] = useState<CreateSongRequest["time_signature"]>("4/4");
+  const [newSongBpm, setNewSongBpm] = useState(120);
 
   // Selected song state
   const [selectedSongId, setSelectedSongId] = useState<string | null>(null);
@@ -233,20 +247,50 @@ export default function ChatInterface() {
     };
   }, [isDraggingNewLoop, dragStartMeasure, dragCurrentMeasure, dragTrackId, songDetail]);
 
+  // Global keyboard handler for space bar to toggle playback
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if space bar was pressed
+      if (e.code === "Space" || e.key === " ") {
+        // Check if the target is a text input element
+        const target = e.target as HTMLElement;
+        const isTextInput =
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable;
+
+        // If not in a text input, toggle playback
+        if (!isTextInput) {
+          e.preventDefault(); // Prevent page scroll
+          togglePlayPause();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [togglePlayPause]);
+
   // Create a new song
   const handleCreateSong = async () => {
     try {
       setIsCreatingSong(true);
       const result = await createSong({
-        bpm: 120,
-        key: "C",
-        time_signature: "4/4",
+        bpm: newSongBpm,
+        key: newSongKey,
+        time_signature: newSongTimeSignature,
       });
 
       if (result.data) {
         // Add the new song to the list
         setSongs([result.data, ...songs]);
         setShowNewSongModal(false);
+        // Reset form
+        setNewSongKey("C");
+        setNewSongTimeSignature("4/4");
+        setNewSongBpm(120);
         // Select the new song
         setSelectedSongId(result.data.id);
       } else {
@@ -258,6 +302,17 @@ export default function ChatInterface() {
       alert("Failed to create song. Please try again.");
     } finally {
       setIsCreatingSong(false);
+    }
+  };
+
+  // Handle closing new song modal
+  const handleCloseNewSongModal = () => {
+    if (songs.length > 0) {
+      setShowNewSongModal(false);
+      // Reset form
+      setNewSongKey("C");
+      setNewSongTimeSignature("4/4");
+      setNewSongBpm(120);
     }
   };
 
@@ -652,8 +707,45 @@ export default function ChatInterface() {
   };
 
   // Handle loop drop to update offset
-  const handleLoopDrop = async (loopId: string, newOffset: number) => {
+  const handleLoopDrop = async (
+    loopId: string,
+    dropMeasure: number,
+    dragItem: DragItem
+  ) => {
     try {
+      // Calculate the actual new offset based on where the loop was grabbed
+      const grabOffset = dragItem.dragGrabOffset || 0;
+      const newOffset = dropMeasure - grabOffset;
+
+      // Don't allow negative offsets
+      if (newOffset < 0) {
+        return;
+      }
+
+      // Find the track and loop being dragged
+      const track = songDetail?.tracks?.find((t) => t.id === dragItem.trackId);
+      if (!track) return;
+
+      const draggedLoop = track.loops?.find((l) => l.id === loopId);
+      if (!draggedLoop) return;
+
+      // Check for collisions with other loops (exclude the loop being dragged)
+      const loopEnd = newOffset + dragItem.measures;
+      const hasCollision = track.loops?.some((otherLoop) => {
+        // Skip the loop being dragged
+        if (otherLoop.id === loopId) return false;
+
+        const otherStart = otherLoop.offset || 0;
+        const otherEnd = otherStart + otherLoop.measures;
+
+        // Check if ranges overlap
+        return newOffset < otherEnd && loopEnd > otherStart;
+      });
+
+      if (hasCollision) {
+        return; // Don't allow drop if it would overlap with another loop
+      }
+
       const result = await updateLoop(loopId, { offset: newOffset });
 
       if (result.error) {
@@ -986,10 +1078,14 @@ export default function ChatInterface() {
                     }}
                   >
                     {Array.from({ length: totalMeasures }, (_, i) => {
-                      const isCurrentMeasure = isPlaying && i === currentMeasure;
+                      const isCurrentMeasure = i === currentMeasure;
                       return (
                         <Box
                           key={i}
+                          onClick={() => {
+                            const startBeat = i * beatsPerMeasure;
+                            playFromBeat(startBeat);
+                          }}
                           sx={{
                             width: MEASURE_WIDTH,
                             flexShrink: 0,
@@ -1003,6 +1099,10 @@ export default function ChatInterface() {
                             fontSize: "0.875rem",
                             bgcolor: isCurrentMeasure ? "primary.light" : "transparent",
                             transition: "background-color 0.1s, color 0.1s",
+                            cursor: "pointer",
+                            "&:hover": {
+                              bgcolor: isCurrentMeasure ? "primary.light" : "action.hover",
+                            },
                           }}
                         >
                           {i + 1}
@@ -1024,13 +1124,45 @@ export default function ChatInterface() {
                       {/* Grid background with measure markers - droppable cells */}
                       {Array.from({ length: totalMeasures }, (_, measureIndex) => {
                         const DropCell = () => {
-                          const [{ isOver }, drop] = useDrop(() => ({
+                          const [{ isOver, canDrop }, drop] = useDrop(() => ({
                             accept: ITEM_TYPE,
+                            canDrop: (item: DragItem, monitor) => {
+                              // Don't allow drops during playback
+                              if (isPlaying) return false;
+
+                              // Only allow drops on the same track
+                              if (item.trackId !== track.id) return false;
+
+                              // Calculate the actual new offset based on where the loop was grabbed
+                              const grabOffset = item.dragGrabOffset || 0;
+                              const newOffset = measureIndex - grabOffset;
+
+                              // Don't allow negative offsets
+                              if (newOffset < 0) return false;
+
+                              // Check for collisions with other loops (exclude the loop being dragged)
+                              const loopEnd = newOffset + item.measures;
+
+                              // Find loops that would collide with the new position
+                              const hasCollision = track.loops?.some((otherLoop) => {
+                                // Skip the loop being dragged (comparing by ID)
+                                if (otherLoop.id === item.loopId) return false;
+
+                                const otherStart = otherLoop.offset || 0;
+                                const otherEnd = otherStart + otherLoop.measures;
+
+                                // Check if ranges [newOffset, loopEnd) and [otherStart, otherEnd) overlap
+                                return newOffset < otherEnd && loopEnd > otherStart;
+                              });
+
+                              return !hasCollision;
+                            },
                             drop: (item: DragItem) => {
-                              handleLoopDrop(item.loopId, measureIndex);
+                              handleLoopDrop(item.loopId, measureIndex, item);
                             },
                             collect: (monitor) => ({
                               isOver: monitor.isOver(),
+                              canDrop: monitor.canDrop(),
                             }),
                           }));
 
@@ -1050,17 +1182,23 @@ export default function ChatInterface() {
                             return measureIndex >= loopStart && measureIndex < loopEnd;
                           });
 
-                          // Check if this is the current measure during playback
-                          const isCurrentMeasure = isPlaying && measureIndex === currentMeasure;
+                          // Check if this is the current measure
+                          const isCurrentMeasure = measureIndex === currentMeasure;
 
                           return (
                             <Box
                               ref={drop}
                               onMouseDown={(e) => {
-                                e.preventDefault();
-                                handleDragCreateStart(measureIndex, track.id, track);
+                                if (!isPlaying) {
+                                  e.preventDefault();
+                                  handleDragCreateStart(measureIndex, track.id, track);
+                                }
                               }}
-                              onMouseEnter={() => handleDragCreateMove(measureIndex)}
+                              onMouseEnter={() => {
+                                if (!isPlaying) {
+                                  handleDragCreateMove(measureIndex);
+                                }
+                              }}
                               sx={{
                                 width: MEASURE_WIDTH,
                                 flexShrink: 0,
@@ -1068,15 +1206,15 @@ export default function ChatInterface() {
                                 borderColor: "divider",
                                 bgcolor: isInDragSelection
                                   ? "primary.main"
-                                  : isOver
-                                    ? "primary.light"
-                                    : isCurrentMeasure
-                                      ? "primary.light"
-                                      : measureIndex % 4 === 0
-                                        ? "action.hover"
+                                  : isOver && canDrop
+                                    ? "success.light"
+                                    : isOver && !canDrop
+                                      ? "error.light"
+                                      : isCurrentMeasure
+                                        ? "primary.light"
                                         : "transparent",
                                 transition: "background-color 0.1s",
-                                cursor: hasLoopAtPosition ? "default" : "ew-resize",
+                                cursor: isPlaying ? "default" : hasLoopAtPosition ? "default" : "ew-resize",
                                 opacity: isInDragSelection ? 0.6 : 1,
                               }}
                             />
@@ -1095,13 +1233,31 @@ export default function ChatInterface() {
                         const DraggableLoop = () => {
                           const [{ isDragging }, drag] = useDrag(() => ({
                             type: ITEM_TYPE,
-                            item: {
-                              type: ITEM_TYPE,
-                              loopId: loop.id,
-                              trackId: track.id,
-                              currentOffset: offset,
-                              measures: loop.measures,
-                            } as DragItem,
+                            canDrag: () => !isPlaying,
+                            item: (monitor) => {
+                              // Calculate which measure within the loop was grabbed
+                              const initialOffset = monitor.getInitialClientOffset();
+                              const initialSourceOffset = monitor.getInitialSourceClientOffset();
+
+                              let dragGrabOffset = 0;
+                              if (initialOffset && initialSourceOffset) {
+                                // Calculate relative X position within the card
+                                const relativeX = initialOffset.x - initialSourceOffset.x;
+                                // Convert to measure index (0-based)
+                                dragGrabOffset = Math.floor(relativeX / MEASURE_WIDTH);
+                                // Clamp to valid range
+                                dragGrabOffset = Math.max(0, Math.min(dragGrabOffset, loop.measures - 1));
+                              }
+
+                              return {
+                                type: ITEM_TYPE,
+                                loopId: loop.id,
+                                trackId: track.id,
+                                currentOffset: offset,
+                                measures: loop.measures,
+                                dragGrabOffset,
+                              } as DragItem;
+                            },
                             collect: (monitor) => ({
                               isDragging: monitor.isDragging(),
                             }),
@@ -1111,20 +1267,22 @@ export default function ChatInterface() {
 
                           return (
                             <Card
-                              ref={isGenerating ? undefined : drag}
+                              ref={isGenerating || isPlaying ? undefined : drag}
                               sx={{
                                 position: "absolute",
                                 left: `${left}px`,
                                 width: `${width}px`,
                                 height: 140,
-                                cursor: isGenerating ? "default" : isDragging ? "grabbing" : "grab",
+                                cursor: isGenerating || isPlaying ? "pointer" : isDragging ? "grabbing" : "grab",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
+                                border: 1,
+                                borderColor: "divider",
+                                pointerEvents: isDragging ? "none" : "auto",
                                 opacity: isDragging ? 0.5 : 1,
-                                "&:hover": {
-                                  bgcolor: isGenerating ? "inherit" : "action.hover",
-                                  boxShadow: isGenerating ? 0 : 2,
+                                "&:hover": isGenerating || isPlaying ? {} : {
+                                  borderColor: "text.primary",
                                 },
                               }}
                               onClick={isGenerating ? undefined : () => handleOpenEditLoopModal(loop)}
@@ -1138,14 +1296,9 @@ export default function ChatInterface() {
                                     </Typography>
                                   </Stack>
                                 ) : (
-                                  <>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                      Loop {index + 1}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                      {loop.measures} measures • {loop.midi_events.length} events
-                                    </Typography>
-                                  </>
+                                  <Typography variant="subtitle2">
+                                    Loop {index + 1}
+                                  </Typography>
                                 )}
                               </CardContent>
                             </Card>
@@ -1166,7 +1319,7 @@ export default function ChatInterface() {
       {/* New Song Modal */}
       <Modal
         open={showNewSongModal}
-        onClose={() => songs.length > 0 && setShowNewSongModal(false)}
+        onClose={handleCloseNewSongModal}
         aria-labelledby="new-song-modal-title"
         aria-describedby="new-song-modal-description"
       >
@@ -1186,14 +1339,62 @@ export default function ChatInterface() {
           <Typography id="new-song-modal-title" variant="h6" component="h2" gutterBottom>
             {songs.length === 0 ? "Welcome to MIDI Agent" : "Create New Song"}
           </Typography>
-          <Typography id="new-song-modal-description" sx={{ mb: 3 }}>
-            {songs.length === 0
-              ? "You don't have any songs yet. Create your first song to get started."
-              : "Create a new song with default settings (C major, 120 BPM)."}
-          </Typography>
+
+          <Stack spacing={2} sx={{ mb: 3 }}>
+            {/* Key Selection */}
+            <FormControl fullWidth size="small">
+              <InputLabel id="song-key-label">Key</InputLabel>
+              <Select
+                labelId="song-key-label"
+                id="song-key"
+                value={newSongKey}
+                label="Key"
+                onChange={(e) => setNewSongKey(e.target.value as CreateSongRequest["key"])}
+                disabled={isCreatingSong}
+              >
+                {SONG_KEYS.map((key) => (
+                  <MenuItem key={key} value={key}>
+                    {key}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Time Signature Selection */}
+            <FormControl fullWidth size="small">
+              <InputLabel id="song-time-sig-label">Time Signature</InputLabel>
+              <Select
+                labelId="song-time-sig-label"
+                id="song-time-sig"
+                value={newSongTimeSignature}
+                label="Time Signature"
+                onChange={(e) => setNewSongTimeSignature(e.target.value)}
+                disabled={isCreatingSong}
+              >
+                <MenuItem value="4/4">4/4</MenuItem>
+                <MenuItem value="3/4">3/4</MenuItem>
+                <MenuItem value="6/8">6/8</MenuItem>
+                <MenuItem value="5/4">5/4</MenuItem>
+                <MenuItem value="7/8">7/8</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* BPM Input */}
+            <TextField
+              fullWidth
+              size="small"
+              label="BPM"
+              type="number"
+              value={newSongBpm}
+              onChange={(e) => setNewSongBpm(parseInt(e.target.value) || 120)}
+              inputProps={{ min: 30, max: 300, step: 1 }}
+              disabled={isCreatingSong}
+            />
+          </Stack>
+
           <Stack direction="row" spacing={2}>
             {songs.length > 0 && (
-              <Button variant="outlined" fullWidth onClick={() => setShowNewSongModal(false)} disabled={isCreatingSong}>
+              <Button variant="outlined" fullWidth onClick={handleCloseNewSongModal} disabled={isCreatingSong}>
                 Cancel
               </Button>
             )}
@@ -1550,21 +1751,41 @@ export default function ChatInterface() {
             sx={{ width: 100 }}
           />
 
-          {/* Play/Pause Button */}
-          <IconButton
-            color="primary"
-            size="large"
-            onClick={togglePlayPause}
-            sx={{
-              bgcolor: "primary.main",
-              color: "primary.contrastText",
-              "&:hover": {
-                bgcolor: "primary.dark",
-              },
-            }}
-          >
-            {isPlaying ? <PauseIcon fontSize="large" /> : <PlayArrowIcon fontSize="large" />}
-          </IconButton>
+          {/* Playback Controls */}
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {/* Back to Start Button */}
+            <IconButton
+              color="primary"
+              size="large"
+              onClick={stop}
+              sx={{
+                bgcolor: "action.hover",
+                "&:hover": {
+                  bgcolor: "action.selected",
+                },
+              }}
+              aria-label="back to start"
+            >
+              <SkipPreviousIcon fontSize="large" />
+            </IconButton>
+
+            {/* Play/Pause Button */}
+            <IconButton
+              color="primary"
+              size="large"
+              onClick={togglePlayPause}
+              sx={{
+                bgcolor: "primary.main",
+                color: "primary.contrastText",
+                "&:hover": {
+                  bgcolor: "primary.dark",
+                },
+              }}
+              aria-label={isPlaying ? "pause" : "play"}
+            >
+              {isPlaying ? <PauseIcon fontSize="large" /> : <PlayArrowIcon fontSize="large" />}
+            </IconButton>
+          </Box>
         </Paper>
       </Box>
     </Box>

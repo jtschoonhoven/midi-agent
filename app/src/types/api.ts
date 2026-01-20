@@ -340,7 +340,7 @@ export interface components {
              * @description Musical key
              * @enum {string}
              */
-            key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#";
+            key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#" | "Abm" | "Am" | "A#m" | "Bbm" | "Bm" | "Cm" | "C#m" | "Dbm" | "Dm" | "D#m" | "Ebm" | "Em" | "Fm" | "F#m" | "Gbm" | "Gm" | "G#m";
             /**
              * Time Signature
              * @description Time signature

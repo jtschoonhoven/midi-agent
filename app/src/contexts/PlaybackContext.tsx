@@ -59,6 +59,7 @@ interface PlaybackContextType {
   pause: () => void;
   stop: () => void;
   togglePlayPause: () => void;
+  playFromBeat: (beat: number) => Promise<void>;
   setBpm: (bpm: number) => void;
   loadSong: (songData: SongData | null) => void;
   midiOutputs: MidiOutput[];
@@ -186,7 +187,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             events.forEach((event) => {
               const note = tone.Frequency(event.event).toMidi();
               const velocity = Math.floor(event.value * 1.27);
-              output.send([0x90 + (channel - 1), note, velocity]);
+
+              // Use Note Off (0x80) for note-off events, Note On (0x90) for note-on events
+              const statusByte = event.value > 0 ? 0x90 + (channel - 1) : 0x80 + (channel - 1);
+
+              output.send([statusByte, note, velocity]);
             });
           }
         });
@@ -512,9 +517,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Create synths after audio context is started (requires user gesture)
     await ensureSynthsCreated();
 
-    // Reset to beginning
-    currentBeatRef.current = -1; // -1 to make sure we don't skip the first beat
-    setCurrentBeat(-1);
+    // Resume from current position (or start from beginning if at -1)
     setIsPlaying(true);
   };
 
@@ -532,31 +535,54 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (isPlaying) {
       pause();
     } else {
+      // If at the end or not started, reset to beginning
+      if (currentBeatRef.current < 0) {
+        currentBeatRef.current = -1;
+        setCurrentBeat(-1);
+      }
       await play();
     }
+  };
+
+  const playFromBeat = async (beat: number) => {
+    // Set to specific beat position FIRST (subtract small amount to catch events at this beat)
+    currentBeatRef.current = beat - 0.01;
+    setCurrentBeat(beat - 0.01);
+
+    // Start the audio context if using browser audio
+    if (selectedMidiOutput.type === "browser") {
+      const tone = await getTone();
+      await tone.start();
+      audioContextStartedRef.current = true;
+    }
+
+    // Create synths after audio context is started (requires user gesture)
+    await ensureSynthsCreated();
+
+    setIsPlaying(true);
   };
 
   const setBpm = (newBpm: number) => {
     setBpmState(newBpm);
   };
 
-  const loadSong = useCallback(
-    (newSongData: SongData | null) => {
-      // Stop playback only if song data is cleared
-      if (!newSongData && isPlaying) {
-        setIsPlaying(false);
-      }
-      currentBeatRef.current = -1;
-      setCurrentBeat(-1);
-      setSongData(newSongData);
+  const loadSong = useCallback((newSongData: SongData | null) => {
+    // Stop playback only if song data is cleared
+    if (!newSongData && isPlayingRef.current) {
+      setIsPlaying(false);
+    }
 
-      // Update BPM from song data if provided
-      if (newSongData) {
-        setBpmState(newSongData.bpm);
-      }
-    },
-    [isPlaying]
-  );
+    // Only reset beat position if we're actually changing the song
+    // (not just reloading the same song data)
+    currentBeatRef.current = -1;
+    setCurrentBeat(-1);
+    setSongData(newSongData);
+
+    // Update BPM from song data if provided
+    if (newSongData) {
+      setBpmState(newSongData.bpm);
+    }
+  }, []);
 
   return (
     <PlaybackContext.Provider
@@ -568,6 +594,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         pause,
         stop,
         togglePlayPause,
+        playFromBeat,
         setBpm,
         loadSong,
         midiOutputs,

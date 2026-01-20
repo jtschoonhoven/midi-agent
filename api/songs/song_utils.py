@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from api.songs import song_models
+from api.songs.song_types import TimeSignature
 
 
 def get_song_for_user(db: Session, user_id: str | UUID, song_id: str | UUID) -> Optional["song_models.MidiSong"]:

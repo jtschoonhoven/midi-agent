@@ -177,7 +177,7 @@ async def create_song(
         tracks_config = [
             {"title": "Piano", "midi_channel": 1, "instrument": "piano"},
             {"title": "Bass", "midi_channel": 2, "instrument": "bass"},
-            {"title": "Drums", "midi_channel": 3, "instrument": "drum"},
+            {"title": "Drums", "midi_channel": 10, "instrument": "drum"},
         ]
 
         for config in tracks_config:

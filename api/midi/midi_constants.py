@@ -185,23 +185,31 @@ MIDI_EVENT_TYPES: list[MidiEventType] = [
     # GM drum events
     "acousticbassdrum",
     "lowbassdrum",
+    "lobassdrum",
     "electricbassdrum",
     "highbassdrum",
+    "hibassdrum",
     "sidestick",
     "acousticsnare",
     "handclap",
     "electricsnare",
     "rimshot",
     "lowfloortom",
+    "lofloortom",
     "closedhihat",
     "highfloortom",
+    "hifloortom",
     "pedalhihat",
     "lowtom",
+    "lotom",
     "openhihat",
     "lowmidtom",
+    "lomidtom",
     "highmidtom",
+    "himidtom",
     "crashcymbal1",
     "hightom",
+    "hitom",
     "ridecymbal1",
     "chinesecymbal",
     "ridebell",
@@ -212,18 +220,31 @@ MIDI_EVENT_TYPES: list[MidiEventType] = [
     "vibraslap",
     "ridecymbal2",
     "highbongo",
+    "hibongo",
     "lowbongo",
+    "lobongo",
     "mutehighconga",
+    "mutehiconga",
     "openhighconga",
+    "openhiconga",
     "lowconga",
+    "loconga",
     "hightimbale",
+    "hitimbale",
     "lowtimbale",
+    "lotimbale",
     "highagogo",
+    "hiagogo",
     "highagogô",
+    "hiagogô",
     "highagog",
+    "hiagog",
     "lowagogo",
+    "loagogo",
     "lowagogô",
+    "loagogô",
     "lowagog",
+    "loagog",
     "cabasa",
     "maracas",
     "shortwhistle",
@@ -236,7 +257,9 @@ MIDI_EVENT_TYPES: list[MidiEventType] = [
     "longgiro",
     "claves",
     "highwoodblock",
+    "hiwoodblock",
     "lowwoodblock",
+    "lowoodblock",
     "mutecuica",
     "mutecuíca",
     "opencuica",
@@ -440,23 +463,31 @@ MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     # GM drum events
     "acousticbassdrum": (0x90, 35),  # Acoustic Bass Drum
     "lowbassdrum": (0x90, 35),  # Low Bass Drum
+    "lobassdrum": (0x90, 35),  # Low Bass Drum
     "electricbassdrum": (0x90, 36),  # Electric Bass Drum
     "highbassdrum": (0x90, 36),  # High Bass Drum
+    "hibassdrum": (0x90, 36),  # High Bass Drum
     "sidestick": (0x90, 37),  # Side Stick
     "acousticsnare": (0x90, 38),  # Acoustic Snare
     "handclap": (0x90, 39),  # Hand Clap
     "electricsnare": (0x90, 40),  # Electric Snare
     "rimshot": (0x90, 40),  # Rimshot
     "lowfloortom": (0x90, 41),  # Low Floor Tom
+    "lofloortom": (0x90, 41),  # Low Floor Tom
     "closedhihat": (0x90, 42),  # Closed Hi-hat
     "highfloortom": (0x90, 43),  # High Floor Tom
+    "hifloortom": (0x90, 43),  # High Floor Tom
     "pedalhihat": (0x90, 44),  # Pedal Hi-hat
     "lowtom": (0x90, 45),  # Low Tom
+    "lotom": (0x90, 45),  # Low Tom
     "openhihat": (0x90, 46),  # Open Hi-hat
     "lowmidtom": (0x90, 47),  # Low-Mid Tom
+    "lomidtom": (0x90, 47),  # Low-Mid Tom
     "highmidtom": (0x90, 48),  # High-Mid Tom
+    "himidtom": (0x90, 48),  # High-Mid Tom
     "crashcymbal1": (0x90, 49),  # Crash Cymbal 1
     "hightom": (0x90, 50),  # High Tom
+    "hitom": (0x90, 50),  # High Tom
     "ridecymbal1": (0x90, 51),  # Ride Cymbal 1
     "chinesecymbal": (0x90, 52),  # Chinese Cymbal
     "ridebell": (0x90, 53),  # Ride Bell
@@ -467,18 +498,30 @@ MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "vibraslap": (0x90, 58),  # Vibraslap
     "ridecymbal2": (0x90, 59),  # Ride Cymbal 2
     "highbongo": (0x90, 60),  # High Bongo
+    "hibongo": (0x90, 60),  # High Bongo
     "lowbongo": (0x90, 61),  # Low Bongo
+    "lobongo": (0x90, 61),  # Low Bongo
     "mutehighconga": (0x90, 62),  # Mute High Conga
+    "mutehiconga": (0x90, 62),  # Mute High Conga
     "openhighconga": (0x90, 63),  # Open High Conga
     "lowconga": (0x90, 64),  # Low Conga
+    "loconga": (0x90, 64),  # Low Conga
     "hightimbale": (0x90, 65),  # High Timbale
+    "hitimbale": (0x90, 65),  # High Timbale
     "lowtimbale": (0x90, 66),  # Low Timbale
+    "lotimbale": (0x90, 66),  # Low Timbale
     "highagogo": (0x90, 67),  # High Agogo
+    "hiagogo": (0x90, 67),  # High Agogo
     "highagogô": (0x90, 67),  # High Agogô
+    "hiagogô": (0x90, 67),  # High Agogô
     "highagog": (0x90, 67),  # High Agog
+    "hiagog": (0x90, 67),  # High Agog
     "lowagogo": (0x90, 68),  # Low Agogo
+    "loagogo": (0x90, 68),  # Low Agogo
     "lowagogô": (0x90, 68),  # Low Agogô
+    "loagogô": (0x90, 68),  # Low Agogô
     "lowagog": (0x90, 68),  # Low Agog
+    "loagog": (0x90, 68),  # Low Agog
     "cabasa": (0x90, 69),  # Cabasa
     "maracas": (0x90, 70),  # Maracas
     "shortwhistle": (0x90, 71),  # Short Whistle
@@ -491,7 +534,9 @@ MIDI_EVENT_TO_HEX: dict[MidiEventType, tuple[int, int]] = {
     "longgiro": (0x90, 74),  # Long Giro
     "claves": (0x90, 75),  # Claves
     "highwoodblock": (0x90, 76),  # High Woodblock
+    "hiwoodblock": (0x90, 76),  # High Woodblock
     "lowwoodblock": (0x90, 77),  # Low Woodblock
+    "lowoodblock": (0x90, 77),  # Low Woodblock
     "mutecuica": (0x90, 78),  # Mute Cuica
     "mutecuíca": (0x90, 78),  # Mute Cuíca
     "opencuica": (0x90, 79),  # Open Cuica
