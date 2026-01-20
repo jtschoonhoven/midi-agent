@@ -260,7 +260,7 @@
           "loops"
         ],
         "summary": "Update Loop",
-        "description": "Update a loop's offset, repeat, or track_id.\nAll fields are optional - only provided fields will be updated.",
+        "description": "Update a loop's offset, extend_measures, or track_id.\nAll fields are optional - only provided fields will be updated.",
         "operationId": "update_loop_api_midi_loops__loop_id__patch",
         "parameters": [
           {
@@ -349,13 +349,54 @@
         }
       }
     },
+    "/api/midi/loops/{loop_id}/download": {
+      "get": {
+        "tags": [
+          "loops"
+        ],
+        "summary": "Download Loop Wav",
+        "description": "Download a loop as a WAV file.\n\nRenders the loop to audio using the instrument samples and returns it as a downloadable WAV file.",
+        "operationId": "download_loop_wav_api_midi_loops__loop_id__download_get",
+        "parameters": [
+          {
+            "name": "loop_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Loop Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/midi/tracks/": {
       "post": {
         "tags": [
           "tracks"
         ],
         "summary": "Create Track",
-        "description": "Create a new MIDI track for a song.\n\nThe MIDI channel is automatically assigned as the next available channel\nbased on existing tracks in the song (max channel + 1).",
+        "description": "Create a new MIDI track for a song.\n\nThe MIDI channel is automatically assigned as the next available channel\nbased on existing tracks in the song (max channel + 1).\n\nThe track color is automatically assigned cyclically from the color palette.",
         "operationId": "create_track_api_midi_tracks__post",
         "requestBody": {
           "content": {
@@ -431,7 +472,7 @@
           "tracks"
         ],
         "summary": "Update Track",
-        "description": "Update a track's title, MIDI channel, and/or instrument.\nAll fields are optional - only provided fields will be updated.",
+        "description": "Update a track's title, MIDI channel, instrument, and/or color.\nAll fields are optional - only provided fields will be updated.",
         "operationId": "update_track_api_midi_tracks__track_id__patch",
         "parameters": [
           {
@@ -609,12 +650,11 @@
             "title": "Measures",
             "description": "Number of measures in the loop (1-32)"
           },
-          "repeat": {
+          "extend_measures": {
             "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Repeat",
-            "description": "Number of times to repeat the loop (default: 1)",
-            "default": 1
+            "title": "Extend Measures",
+            "description": "Number of extra measures to add (or subtract) from the loop (default: 0)",
+            "default": 0
           }
         },
         "type": "object",
@@ -999,23 +1039,31 @@
               "G9",
               "acousticbassdrum",
               "lowbassdrum",
+              "lobassdrum",
               "electricbassdrum",
               "highbassdrum",
+              "hibassdrum",
               "sidestick",
               "acousticsnare",
               "handclap",
               "electricsnare",
               "rimshot",
               "lowfloortom",
+              "lofloortom",
               "closedhihat",
               "highfloortom",
+              "hifloortom",
               "pedalhihat",
               "lowtom",
+              "lotom",
               "openhihat",
               "lowmidtom",
+              "lomidtom",
               "highmidtom",
+              "himidtom",
               "crashcymbal1",
               "hightom",
+              "hitom",
               "ridecymbal1",
               "chinesecymbal",
               "ridebell",
@@ -1026,18 +1074,31 @@
               "vibraslap",
               "ridecymbal2",
               "highbongo",
+              "hibongo",
               "lowbongo",
+              "lobongo",
               "mutehighconga",
+              "mutehiconga",
               "openhighconga",
+              "openhiconga",
               "lowconga",
+              "loconga",
               "hightimbale",
+              "hitimbale",
               "lowtimbale",
+              "lotimbale",
               "highagogo",
+              "hiagogo",
               "highagog\u00f4",
+              "hiagog\u00f4",
               "highagog",
+              "hiagog",
               "lowagogo",
+              "loagogo",
               "lowagog\u00f4",
+              "loagog\u00f4",
               "lowagog",
+              "loagog",
               "cabasa",
               "maracas",
               "shortwhistle",
@@ -1050,7 +1111,9 @@
               "longgiro",
               "claves",
               "highwoodblock",
+              "hiwoodblock",
               "lowwoodblock",
+              "lowoodblock",
               "mutecuica",
               "mutecu\u00edca",
               "opencuica",
@@ -1114,10 +1177,10 @@
             "title": "Measures",
             "description": "Number of measures in the loop"
           },
-          "repeat": {
+          "extend_measures": {
             "type": "integer",
-            "title": "Repeat",
-            "description": "Number of times to repeat the loop"
+            "title": "Extend Measures",
+            "description": "Number of extra measures to add (or subtract) from the loop"
           },
           "midi_events": {
             "items": {
@@ -1157,7 +1220,7 @@
           "id",
           "offset",
           "measures",
-          "repeat",
+          "extend_measures",
           "midi_events",
           "track_id",
           "created_at",
@@ -1183,10 +1246,10 @@
             "title": "Measures",
             "description": "Number of measures in the loop"
           },
-          "repeat": {
+          "extend_measures": {
             "type": "integer",
-            "title": "Repeat",
-            "description": "Number of times to repeat the loop"
+            "title": "Extend Measures",
+            "description": "Number of extra measures to add (or subtract) from the loop"
           },
           "midi_events": {
             "items": {
@@ -1218,7 +1281,7 @@
           "id",
           "offset",
           "measures",
-          "repeat",
+          "extend_measures",
           "midi_events",
           "track_id",
           "created_at",
@@ -1242,18 +1305,17 @@
             "title": "Offset",
             "description": "Position offset in measures (optional)"
           },
-          "repeat": {
+          "extend_measures": {
             "anyOf": [
               {
-                "type": "integer",
-                "exclusiveMinimum": 0.0
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Repeat",
-            "description": "Number of times to repeat (optional)"
+            "title": "Extend Measures",
+            "description": "Number of extra measures to add (or subtract) from the loop (optional)"
           },
           "track_id": {
             "anyOf": [
@@ -1317,6 +1379,26 @@
             ],
             "title": "Instrument",
             "description": "Instrument type (optional)"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "error",
+                  "warning",
+                  "success",
+                  "info",
+                  "primary",
+                  "secondary"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Color theme (optional)"
           }
         },
         "type": "object",
@@ -1467,6 +1549,19 @@
             "title": "Instrument",
             "description": "Instrument type for this track"
           },
+          "color": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "success",
+              "info",
+              "primary",
+              "secondary"
+            ],
+            "title": "Color",
+            "description": "Color theme for this track"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -1493,6 +1588,7 @@
           "title",
           "midi_channel",
           "instrument",
+          "color",
           "created_at",
           "updated_at",
           "loops"
@@ -1533,6 +1629,19 @@
             "title": "Instrument",
             "description": "Instrument type for this track"
           },
+          "color": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning",
+              "success",
+              "info",
+              "primary",
+              "secondary"
+            ],
+            "title": "Color",
+            "description": "Color theme for this track"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -1551,6 +1660,7 @@
           "title",
           "midi_channel",
           "instrument",
+          "color",
           "created_at",
           "updated_at"
         ],

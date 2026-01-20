@@ -134,7 +134,7 @@ export interface paths {
         head?: never;
         /**
          * Update Loop
-         * @description Update a loop's offset, repeat, or track_id.
+         * @description Update a loop's offset, extend_measures, or track_id.
          *     All fields are optional - only provided fields will be updated.
          */
         patch: operations["update_loop_api_midi_loops__loop_id__patch"];
@@ -154,6 +154,28 @@ export interface paths {
          * @description Create a new user chat message for a loop.
          */
         post: operations["append_chat_api_midi_loops__loop_id__chats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/midi/loops/{loop_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Loop Wav
+         * @description Download a loop as a WAV file.
+         *
+         *     Renders the loop to audio using the instrument samples and returns it as a downloadable WAV file.
+         */
+        get: operations["download_loop_wav_api_midi_loops__loop_id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -316,11 +338,11 @@ export interface components {
              */
             measures: number;
             /**
-             * Repeat
-             * @description Number of times to repeat the loop (default: 1)
-             * @default 1
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop (default: 0)
+             * @default 0
              */
-            repeat: number;
+            extend_measures: number;
         };
         /**
          * CreateSongRequest
@@ -463,10 +485,10 @@ export interface components {
              */
             measures: number;
             /**
-             * Repeat
-             * @description Number of times to repeat the loop
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop
              */
-            repeat: number;
+            extend_measures: number;
             /**
              * Midi Events
              * @description MIDI events in the loop
@@ -516,10 +538,10 @@ export interface components {
              */
             measures: number;
             /**
-             * Repeat
-             * @description Number of times to repeat the loop
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop
              */
-            repeat: number;
+            extend_measures: number;
             /**
              * Midi Events
              * @description MIDI events in the loop
@@ -554,10 +576,10 @@ export interface components {
              */
             offset?: number | null;
             /**
-             * Repeat
-             * @description Number of times to repeat (optional)
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop (optional)
              */
-            repeat?: number | null;
+            extend_measures?: number | null;
             /**
              * Track Id
              * @description ID of the parent track (optional)
@@ -1048,6 +1070,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_loop_wav_api_midi_loops__loop_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

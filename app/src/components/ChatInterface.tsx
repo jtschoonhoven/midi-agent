@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Box,
-  Container,
   Card,
   CardContent,
   AppBar,
@@ -32,6 +31,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  ToggleButtonGroup,
+  ToggleButton,
+  useMediaQuery,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
@@ -39,6 +41,9 @@ import AddIcon from "@mui/icons-material/Add";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
+import Brightness7Icon from "@mui/icons-material/Brightness7";
+import Brightness4Icon from "@mui/icons-material/Brightness4";
+import DownloadIcon from "@mui/icons-material/Download";
 import {
   listSongs,
   createSong,
@@ -51,15 +56,18 @@ import {
   createTrack,
   deleteTrack,
   updateTrack,
+  downloadLoopWav,
 } from "../lib/api";
 import { useDrag, useDrop } from "react-dnd";
 import { usePlayback } from "../contexts/PlaybackContext";
+import { useThemeMode } from "../contexts/ThemeContext";
 import type { components } from "../types/api";
 import openApiSchema from "../types/openapi.json";
 
 type Song = components["schemas"]["SongResponse"];
 type SongDetail = components["schemas"]["SongDetailResponse"];
 type Track = components["schemas"]["TrackResponse"];
+type TrackDetail = components["schemas"]["TrackDetailResponse"];
 type Loop = components["schemas"]["LoopResponse"];
 type LoopDetail = components["schemas"]["LoopDetailResponse"];
 
@@ -94,10 +102,19 @@ export default function ChatInterface() {
     loadSong,
     midiOutputs,
     selectedMidiOutput,
+    setLoopZone,
     setSelectedMidiOutput,
     requestMidiAccess,
     hasMidiAccess,
   } = usePlayback();
+  const { themeMode, setThemeMode } = useThemeMode();
+  const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
+
+  // Determine the actual active theme (user selection or system default)
+  const activeTheme = themeMode === null
+    ? (prefersDarkMode ? "dark" : "light")
+    : themeMode;
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
@@ -125,6 +142,7 @@ export default function ChatInterface() {
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [activeTab, setActiveTab] = useState<number>(0);
   const [isDeletingLoop, setIsDeletingLoop] = useState(false);
+  const [isDownloadingLoop, setIsDownloadingLoop] = useState(false);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
 
   // Track modal state
@@ -147,6 +165,17 @@ export default function ChatInterface() {
   const [dragStartMeasure, setDragStartMeasure] = useState<number | null>(null);
   const [dragCurrentMeasure, setDragCurrentMeasure] = useState<number | null>(null);
   const [dragTrackId, setDragTrackId] = useState<string | null>(null);
+
+  // Playback loop zone state (for ruler bar loop selection)
+  const [loopZoneStart, setLoopZoneStart] = useState<number | null>(null);
+  const [loopZoneEnd, setLoopZoneEnd] = useState<number | null>(null);
+  const [isDraggingLoopZone, setIsDraggingLoopZone] = useState(false);
+
+  // Track loop resize state
+  const [isResizingLoop, setIsResizingLoop] = useState(false);
+  const [resizingLoopId, setResizingLoopId] = useState<string | null>(null);
+  const [resizeStartExtendMeasures, setResizeStartExtendMeasures] = useState<number>(0);
+  const [resizeCurrentExtendMeasures, setResizeCurrentExtendMeasures] = useState<number>(0);
 
   const toggleDrawer = (open: boolean) => () => {
     setDrawerOpen(open);
@@ -223,7 +252,7 @@ export default function ChatInterface() {
             id: loop.id,
             offset: loop.offset,
             measures: loop.measures,
-            repeat: loop.repeat,
+            extend_measures: loop.extend_measures,
             midi_events: loop.midi_events as any, // API returns MidiEvent[] but typed as { [key: string]: unknown; }[]
             track_id: loop.track_id,
           })),
@@ -249,6 +278,34 @@ export default function ChatInterface() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isDraggingNewLoop, dragStartMeasure, dragCurrentMeasure, dragTrackId, songDetail]);
+
+  // Global mouse up handler for loop zone drag
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isDraggingLoopZone) {
+        handleLoopZoneDragEnd();
+      }
+    };
+
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingLoopZone, loopZoneStart, loopZoneEnd, songDetail]);
+
+  // Global mouse up handler for loop resize
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isResizingLoop) {
+        handleLoopResizeEnd();
+      }
+    };
+
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizingLoop, resizingLoopId, resizeCurrentExtendMeasures, resizeStartExtendMeasures, songDetail, selectedSongId]);
 
   // Global keyboard handler for space bar to toggle playback
   useEffect(() => {
@@ -429,7 +486,7 @@ export default function ChatInterface() {
         const createResult = await createLoop({
           track_id: selectedTrackId,
           measures: loopMeasures,
-          repeat: 1,
+          extend_measures: 0,
         });
 
         if (!createResult.data) {
@@ -575,6 +632,23 @@ export default function ChatInterface() {
       alert("Failed to delete loop. Please try again.");
     } finally {
       setIsDeletingLoop(false);
+    }
+  };
+
+  const handleDownloadLoop = async () => {
+    if (!selectedLoop) {
+      alert("No loop selected");
+      return;
+    }
+
+    try {
+      setIsDownloadingLoop(true);
+      await downloadLoopWav(selectedLoop.id);
+    } catch (error) {
+      console.error("Failed to download loop:", error);
+      alert("Failed to download loop. Please try again.");
+    } finally {
+      setIsDownloadingLoop(false);
     }
   };
 
@@ -781,7 +855,7 @@ export default function ChatInterface() {
   };
 
   // Handle drag-to-create loop start
-  const handleDragCreateStart = (measureIndex: number, trackId: string, track: Track) => {
+  const handleDragCreateStart = (measureIndex: number, trackId: string, track: TrackDetail) => {
     // Check if there's already a loop at this position
     const hasLoopAtPosition = track.loops?.some((loop) => {
       const loopStart = loop.offset || 0;
@@ -828,6 +902,141 @@ export default function ChatInterface() {
     setDragStartMeasure(null);
     setDragCurrentMeasure(null);
     setDragTrackId(null);
+  };
+
+  // Handle loop zone drag start (in ruler bar)
+  const handleLoopZoneDragStart = (measureIndex: number) => {
+    // If clicking on an existing loop zone, remove it
+    if (loopZoneStart !== null && loopZoneEnd !== null) {
+      const minZone = Math.min(loopZoneStart, loopZoneEnd);
+      const maxZone = Math.max(loopZoneStart, loopZoneEnd);
+      if (measureIndex >= minZone && measureIndex <= maxZone) {
+        // Clear the loop zone
+        setLoopZoneStart(null);
+        setLoopZoneEnd(null);
+        setLoopZone(null, null);
+        return;
+      }
+    }
+
+    // Start new loop zone drag
+    setIsDraggingLoopZone(true);
+    setLoopZoneStart(measureIndex);
+    setLoopZoneEnd(measureIndex);
+  };
+
+  // Handle loop zone drag move (in ruler bar)
+  const handleLoopZoneDragMove = (measureIndex: number) => {
+    if (isDraggingLoopZone && loopZoneStart !== null) {
+      setLoopZoneEnd(measureIndex);
+    }
+  };
+
+  // Handle loop zone drag end (in ruler bar)
+  const handleLoopZoneDragEnd = () => {
+    if (isDraggingLoopZone && loopZoneStart !== null && loopZoneEnd !== null && songDetail) {
+      // Calculate start and end in beats
+      const beatsPerMeasure = parseInt(songDetail.time_signature.split("/")[0]) || 4;
+      const startMeasure = Math.min(loopZoneStart, loopZoneEnd);
+      const endMeasure = Math.max(loopZoneStart, loopZoneEnd);
+
+      // Convert to beats (add 1 to end measure to include it in the loop)
+      const startBeat = startMeasure * beatsPerMeasure;
+      const endBeat = (endMeasure + 1) * beatsPerMeasure;
+
+      // Set loop zone in playback context
+      setLoopZone(startBeat, endBeat);
+
+      // Update visual state
+      setLoopZoneStart(startMeasure);
+      setLoopZoneEnd(endMeasure);
+    }
+
+    setIsDraggingLoopZone(false);
+  };
+
+  // Handle loop resize start
+  const handleLoopResizeStart = (e: React.MouseEvent, loop: Loop, _track: TrackDetail) => {
+    e.stopPropagation(); // Prevent loop card click
+    setIsResizingLoop(true);
+    setResizingLoopId(loop.id);
+    setResizeStartExtendMeasures(loop.extend_measures);
+    setResizeCurrentExtendMeasures(loop.extend_measures);
+  };
+
+  // Handle loop resize move
+  const handleLoopResizeMove = (measureIndex: number, loop: Loop, track: TrackDetail) => {
+    if (!isResizingLoop || resizingLoopId !== loop.id) return;
+
+    const loopStart = loop.offset || 0;
+    const originalEndMeasure = loopStart + loop.measures - 1;
+
+    // Calculate new extend_measures based on where the resize is
+    const newExtendMeasures = measureIndex - originalEndMeasure;
+
+    // Calculate the new total end position
+    const newTotalMeasures = loop.measures + newExtendMeasures;
+    const newEndMeasure = loopStart + newTotalMeasures;
+
+    // Allow negative extend_measures to truncate the loop
+    // Minimum: keep at least 0.25 measures (1 beat in 4/4) to keep the loop visible
+    if (newTotalMeasures < 0.25) return;
+
+    // Check for collisions with other loops
+    const hasCollision = track.loops?.some((otherLoop) => {
+      if (otherLoop.id === loop.id) return false;
+
+      const otherStart = otherLoop.offset || 0;
+      const otherEnd = otherStart + otherLoop.measures + otherLoop.extend_measures;
+
+      // Check if the new range would overlap
+      // Only check collision if we're extending (positive direction)
+      if (newTotalMeasures > 0) {
+        return loopStart < otherEnd && newEndMeasure > otherStart;
+      }
+      return false;
+    });
+
+    // Don't update if there would be a collision
+    if (hasCollision) return;
+
+    setResizeCurrentExtendMeasures(newExtendMeasures);
+  };
+
+  // Handle loop resize end
+  const handleLoopResizeEnd = async () => {
+    if (!isResizingLoop || !resizingLoopId) return;
+
+    // Only persist if the value changed
+    if (resizeCurrentExtendMeasures !== resizeStartExtendMeasures) {
+      try {
+        const result = await updateLoop(resizingLoopId, {
+          extend_measures: resizeCurrentExtendMeasures,
+        });
+
+        if (result.error) {
+          console.error("Failed to update loop extend_measures:", result.error);
+          alert("Failed to resize loop. Please try again.");
+        }
+
+        // Reload song details to reflect the update
+        if (songDetail && selectedSongId) {
+          const songResult = await getSong(selectedSongId);
+          if (songResult.data) {
+            setSongDetail(songResult.data);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to update loop extend_measures:", error);
+        alert("Failed to resize loop. Please try again.");
+      }
+    }
+
+    // Reset resize state
+    setIsResizingLoop(false);
+    setResizingLoopId(null);
+    setResizeStartExtendMeasures(0);
+    setResizeCurrentExtendMeasures(0);
   };
 
   return (
@@ -943,6 +1152,26 @@ export default function ChatInterface() {
               {!hasMidiAccess && <MenuItem value="request-midi">Allow MIDI Access</MenuItem>}
             </Select>
           </FormControl>
+
+          {/* Theme Toggle */}
+          <ToggleButtonGroup
+            value={activeTheme}
+            exclusive
+            onChange={(_, newMode) => {
+              if (newMode !== null) {
+                setThemeMode(newMode as "light" | "dark");
+              }
+            }}
+            size="small"
+            sx={{ ml: 2 }}
+          >
+            <ToggleButton value="light" aria-label="light theme" sx={{ color: "inherit" }}>
+              <Brightness7Icon fontSize="small" />
+            </ToggleButton>
+            <ToggleButton value="dark" aria-label="dark theme" sx={{ color: "inherit" }}>
+              <Brightness4Icon fontSize="small" />
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Toolbar>
       </AppBar>
 
@@ -1050,7 +1279,7 @@ export default function ChatInterface() {
               py: 2,
               overflowX: "auto",
               overflowY: "auto",
-              userSelect: isDraggingNewLoop ? "none" : "auto",
+              userSelect: isDraggingNewLoop || isDraggingLoopZone || isResizingLoop ? "none" : "auto",
             }}
           >
             {(() => {
@@ -1094,12 +1323,30 @@ export default function ChatInterface() {
                   >
                     {Array.from({ length: totalMeasures }, (_, i) => {
                       const isCurrentMeasure = i === currentMeasure;
+
+                      // Check if this measure is in the loop zone
+                      const isInLoopZone =
+                        loopZoneStart !== null &&
+                        loopZoneEnd !== null &&
+                        i >= Math.min(loopZoneStart, loopZoneEnd) &&
+                        i <= Math.max(loopZoneStart, loopZoneEnd);
+
                       return (
                         <Box
                           key={i}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleLoopZoneDragStart(i);
+                          }}
+                          onMouseEnter={() => {
+                            handleLoopZoneDragMove(i);
+                          }}
                           onClick={() => {
-                            const startBeat = i * beatsPerMeasure;
-                            playFromBeat(startBeat);
+                            // Only seek playback if not dragging a loop zone
+                            if (!isDraggingLoopZone && !isInLoopZone) {
+                              const startBeat = i * beatsPerMeasure;
+                              playFromBeat(startBeat);
+                            }
                           }}
                           sx={{
                             width: MEASURE_WIDTH,
@@ -1110,13 +1357,17 @@ export default function ChatInterface() {
                             alignItems: "center",
                             justifyContent: "center",
                             fontWeight: "bold",
-                            color: isCurrentMeasure ? "primary.main" : "text.secondary",
+                            color: isCurrentMeasure ? "primary.main" : isInLoopZone ? "secondary.main" : "text.secondary",
                             fontSize: "0.875rem",
-                            bgcolor: isCurrentMeasure ? "primary.light" : "transparent",
+                            bgcolor: isCurrentMeasure
+                              ? "primary.light"
+                              : isInLoopZone
+                                ? "secondary.light"
+                                : "transparent",
                             transition: "background-color 0.1s, color 0.1s",
                             cursor: "pointer",
                             "&:hover": {
-                              bgcolor: isCurrentMeasure ? "primary.light" : "action.hover",
+                              bgcolor: isCurrentMeasure ? "primary.light" : isInLoopZone ? "secondary.main" : "action.hover",
                             },
                           }}
                         >
@@ -1141,7 +1392,7 @@ export default function ChatInterface() {
                         const DropCell = () => {
                           const [{ isOver, canDrop }, drop] = useDrop(() => ({
                             accept: ITEM_TYPE,
-                            canDrop: (item: DragItem, monitor) => {
+                            canDrop: (item: DragItem, _monitor) => {
                               // Don't allow drops during playback
                               if (isPlaying) return false;
 
@@ -1200,18 +1451,25 @@ export default function ChatInterface() {
                           // Check if this is the current measure
                           const isCurrentMeasure = measureIndex === currentMeasure;
 
+                          // Find the loop being resized if any
+                          const resizingLoop = isResizingLoop ? track.loops?.find(l => l.id === resizingLoopId) : null;
+
                           return (
                             <Box
-                              ref={drop}
+                              ref={drop as any}
                               onMouseDown={(e) => {
-                                if (!isPlaying) {
+                                if (!isPlaying && !isResizingLoop) {
                                   e.preventDefault();
                                   handleDragCreateStart(measureIndex, track.id, track);
                                 }
                               }}
                               onMouseEnter={() => {
                                 if (!isPlaying) {
-                                  handleDragCreateMove(measureIndex);
+                                  if (isResizingLoop && resizingLoop) {
+                                    handleLoopResizeMove(measureIndex, resizingLoop, track);
+                                  } else {
+                                    handleDragCreateMove(measureIndex);
+                                  }
                                 }
                               }}
                               sx={{
@@ -1242,13 +1500,20 @@ export default function ChatInterface() {
                       {/* Positioned loops - draggable */}
                       {track.loops?.map((loop, index) => {
                         const offset = loop.offset || 0;
-                        const width = loop.measures * MEASURE_WIDTH;
                         const left = offset * MEASURE_WIDTH;
+
+                        // Calculate width including extend_measures
+                        // Use current resize value if this loop is being resized
+                        const currentExtendMeasures = (isResizingLoop && resizingLoopId === loop.id)
+                          ? resizeCurrentExtendMeasures
+                          : loop.extend_measures;
+                        const totalMeasures = loop.measures + currentExtendMeasures;
+                        const width = totalMeasures * MEASURE_WIDTH;
 
                         const DraggableLoop = () => {
                           const [{ isDragging }, drag] = useDrag(() => ({
                             type: ITEM_TYPE,
-                            canDrag: () => !isPlaying,
+                            canDrag: () => !isPlaying && !isResizingLoop,
                             item: (monitor) => {
                               // Calculate which measure within the loop was grabbed
                               const initialOffset = monitor.getInitialClientOffset();
@@ -1279,10 +1544,11 @@ export default function ChatInterface() {
                           }));
 
                           const isGenerating = generatingLoops.has(loop.id);
+                          const isBeingResized = isResizingLoop && resizingLoopId === loop.id;
 
                           return (
                             <Card
-                              ref={isGenerating || isPlaying ? undefined : drag}
+                              ref={isGenerating || isPlaying || isBeingResized ? undefined : (drag as any)}
                               sx={{
                                 position: "absolute",
                                 left: `${left}px`,
@@ -1293,18 +1559,18 @@ export default function ChatInterface() {
                                 alignItems: "center",
                                 justifyContent: "center",
                                 border: 1,
-                                borderColor: "divider",
+                                borderColor: isBeingResized ? "primary.main" : "divider",
                                 borderLeft: 4,
                                 borderLeftColor: `${track.color}.main`,
-                                pointerEvents: isDragging ? "none" : "auto",
+                                pointerEvents: isDragging || isBeingResized ? "none" : "auto",
                                 opacity: isDragging ? 0.5 : 1,
                                 "&:hover": isGenerating || isPlaying ? {} : {
                                   borderColor: "text.primary",
                                 },
                               }}
-                              onClick={isGenerating ? undefined : () => handleOpenEditLoopModal(loop)}
+                              onClick={isGenerating || isBeingResized ? undefined : () => handleOpenEditLoopModal(loop)}
                             >
-                              <CardContent sx={{ textAlign: "center", p: 2 }}>
+                              <CardContent sx={{ textAlign: "center", p: 2, width: "100%", position: "relative" }}>
                                 {isGenerating ? (
                                   <Stack spacing={2} alignItems="center">
                                     <CircularProgress size={32} />
@@ -1313,11 +1579,39 @@ export default function ChatInterface() {
                                     </Typography>
                                   </Stack>
                                 ) : (
-                                  <Typography variant="subtitle2">
-                                    Loop {index + 1}
-                                  </Typography>
+                                  <>
+                                    <Typography variant="subtitle2">
+                                      Loop {index + 1}
+                                    </Typography>
+                                    {currentExtendMeasures !== 0 && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        {currentExtendMeasures > 0 ? `+${currentExtendMeasures}` : currentExtendMeasures} measures
+                                      </Typography>
+                                    )}
+                                  </>
                                 )}
                               </CardContent>
+
+                              {/* Resize handle on right edge */}
+                              {!isGenerating && !isPlaying && (
+                                <Box
+                                  onMouseDown={(e) => handleLoopResizeStart(e, loop, track)}
+                                  sx={{
+                                    position: "absolute",
+                                    right: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: 16,
+                                    cursor: "ew-resize",
+                                    bgcolor: "transparent",
+                                    zIndex: 10,
+                                    "&:hover": {
+                                      bgcolor: "primary.main",
+                                      opacity: 0.3,
+                                    },
+                                  }}
+                                />
+                              )}
                             </Card>
                           );
                         };
@@ -1617,16 +1911,28 @@ export default function ChatInterface() {
           {/* Footer with buttons */}
           <Box sx={{ p: 3, pt: 2, borderTop: 1, borderColor: "divider" }}>
             <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="center">
-              {/* Left side: Delete button (only in edit mode) */}
+              {/* Left side: Delete and Download buttons (only in edit mode) */}
               {loopModalMode === "edit" ? (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={handleDeleteLoop}
-                  disabled={isCreatingLoop || isDeletingLoop}
-                >
-                  {isDeletingLoop ? <CircularProgress size={24} /> : "Delete"}
-                </Button>
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleDeleteLoop}
+                    disabled={isCreatingLoop || isDeletingLoop}
+                  >
+                    {isDeletingLoop ? <CircularProgress size={24} /> : "Delete"}
+                  </Button>
+                  {selectedLoop && selectedLoop.midi_events && selectedLoop.midi_events.length > 0 && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleDownloadLoop}
+                      disabled={isCreatingLoop || isDeletingLoop || isDownloadingLoop}
+                      startIcon={isDownloadingLoop ? undefined : <DownloadIcon />}
+                    >
+                      {isDownloadingLoop ? <CircularProgress size={24} /> : "Download WAV"}
+                    </Button>
+                  )}
+                </Stack>
               ) : (
                 <Box /> // Empty spacer in create mode
               )}

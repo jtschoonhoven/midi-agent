@@ -24,7 +24,7 @@ class MidiLoop(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # In measures
     measures: Mapped[int] = mapped_column(Integer, nullable=False)
-    repeat: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    extend_measures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     midi_events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     track_id: Mapped[str] = mapped_column(String(36), ForeignKey("midi_tracks.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -39,14 +39,14 @@ class MidiLoop(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<MidiLoop(id={self.id}, offset={self.offset}, measures={self.measures}, repeat={self.repeat})>"
+        return f"<MidiLoop(id={self.id}, offset={self.offset}, measures={self.measures}, extend_measures={self.extend_measures})>"
 
     def to_response(self) -> "LoopResponse":
         return loop_schemas.LoopResponse(
             id=self.id,
             offset=self.offset,
             measures=self.measures,
-            repeat=self.repeat,
+            extend_measures=self.extend_measures,
             midi_events=self.midi_events,
             track_id=self.track_id,
             created_at=self.created_at.isoformat(),
@@ -58,7 +58,7 @@ class MidiLoop(Base):
             id=self.id,
             offset=self.offset,
             measures=self.measures,
-            repeat=self.repeat,
+            extend_measures=self.extend_measures,
             midi_events=self.midi_events,
             track_id=self.track_id,
             created_at=self.created_at.isoformat(),

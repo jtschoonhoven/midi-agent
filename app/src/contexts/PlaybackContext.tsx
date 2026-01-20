@@ -27,7 +27,7 @@ interface Loop {
   id: string;
   offset: number;
   measures: number;
-  repeat: number;
+  extend_measures: number;
   midi_events: MidiEvent[];
   track_id: string;
 }
@@ -67,6 +67,7 @@ interface PlaybackContextType {
   setSelectedMidiOutput: (output: MidiOutput) => void;
   requestMidiAccess: () => Promise<void>;
   hasMidiAccess: boolean;
+  setLoopZone: (startBeat: number | null, endBeat: number | null) => void;
 }
 
 const PlaybackContext = createContext<PlaybackContextType | undefined>(undefined);
@@ -82,6 +83,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [bpm, setBpmState] = useState(120);
   const [songData, setSongData] = useState<SongData | null>(null);
   const [currentBeat, setCurrentBeat] = useState<number>(-1);
+  const [loopZoneStart, setLoopZoneStartState] = useState<number | null>(null);
+  const [loopZoneEnd, setLoopZoneEndState] = useState<number | null>(null);
   const synthsRef = useRef<Map<number, any>>(new Map());
   const synthsLoadedRef = useRef<Set<number>>(new Set());
   const synthsInstrumentRef = useRef<Map<number, "piano" | "bass" | "drum">>(new Map());
@@ -107,6 +110,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const currentBeatRef = useRef<number>(-1);
   const isPlayingRef = useRef<boolean>(false);
   const bpmRef = useRef<number>(bpm);
+  const loopZoneStartRef = useRef<number | null>(null);
+  const loopZoneEndRef = useRef<number | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -116,6 +121,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     bpmRef.current = bpm;
   }, [bpm]);
+
+  useEffect(() => {
+    loopZoneStartRef.current = loopZoneStart;
+  }, [loopZoneStart]);
+
+  useEffect(() => {
+    loopZoneEndRef.current = loopZoneEnd;
+  }, [loopZoneEnd]);
 
   // Get beats per measure from time signature string (e.g., "4/4" -> 4, "3/4" -> 3, "6/8" -> 6)
   const getBeatsPerMeasure = (timeSignature?: string): number => {
@@ -230,7 +243,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // How many (fractional) beats have elapsed since the last frame
       const beatDelta = timeDeltaMs * beatsPerMs;
       const prevBeat = currentBeatRef.current;
-      const curBeat = Math.max(0, prevBeat) + beatDelta;
+      let curBeat = Math.max(0, prevBeat) + beatDelta;
+
+      // Check if loop zone is active and handle looping
+      const loopStart = loopZoneStartRef.current;
+      const loopEnd = loopZoneEndRef.current;
+      if (loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
+        // If we've gone past the loop end, jump back to loop start
+        if (curBeat >= loopEnd) {
+          curBeat = loopStart;
+        }
+      }
+
       currentBeatRef.current = curBeat;
       setCurrentBeat(curBeat);
 
@@ -240,18 +264,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       currentSongData.tracks.forEach((track) => {
         track.loops.forEach((loop) => {
           const loopStartBeat = loop.offset * beatsPerMeasure;
-          const loopEndBeat = loopStartBeat + loop.measures * beatsPerMeasure * loop.repeat;
+          const totalMeasures = loop.measures + loop.extend_measures;
+          const loopEndBeat = loopStartBeat + totalMeasures * beatsPerMeasure;
 
           if (curBeat >= loopStartBeat && curBeat < loopEndBeat) {
             loop.midi_events.forEach((event) => {
-              const eventBeat =
-                loopStartBeat +
+              // Calculate the beat position of this event within the ORIGINAL loop (0-based from loop start)
+              const eventBeatInOriginalLoop =
                 (event.measure - 1) * beatsPerMeasure +
                 (event.beat - 1) +
                 (event.beat_div4 - 1) / 4 +
                 (event.beat_div16 - 1) / 16;
-              if (eventBeat > prevBeat && eventBeat <= curBeat) {
-                eventsToSend.push({ channel: track.midi_channel, event });
+
+              const originalLoopBeats = loop.measures * beatsPerMeasure;
+
+              if (loop.extend_measures >= 0) {
+                // Positive or zero: event repeats every originalLoopBeats
+                const totalBeats = totalMeasures * beatsPerMeasure;
+
+                // Check each repetition of the event within the extended loop
+                for (let repetition = 0; repetition * originalLoopBeats < totalBeats; repetition++) {
+                  const eventAbsoluteBeat = loopStartBeat + repetition * originalLoopBeats + eventBeatInOriginalLoop;
+
+                  if (eventAbsoluteBeat > prevBeat && eventAbsoluteBeat <= curBeat) {
+                    eventsToSend.push({ channel: track.midi_channel, event });
+                  }
+                }
+              } else {
+                // Negative: only play events that fall within the truncated range
+                if (eventBeatInOriginalLoop < totalMeasures * beatsPerMeasure) {
+                  const eventAbsoluteBeat = loopStartBeat + eventBeatInOriginalLoop;
+
+                  if (eventAbsoluteBeat > prevBeat && eventAbsoluteBeat <= curBeat) {
+                    eventsToSend.push({ channel: track.midi_channel, event });
+                  }
+                }
               }
             });
           }
@@ -584,6 +631,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setLoopZone = (startBeat: number | null, endBeat: number | null) => {
+    setLoopZoneStartState(startBeat);
+    setLoopZoneEndState(endBeat);
+  };
+
   return (
     <PlaybackContext.Provider
       value={{
@@ -602,6 +654,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setSelectedMidiOutput,
         requestMidiAccess,
         hasMidiAccess,
+        setLoopZone,
       }}
     >
       {children}

@@ -24,7 +24,7 @@ class LoopResponse(pydantic.BaseModel):
     id: str = pydantic.Field(description="Loop ID")
     offset: int = pydantic.Field(description="Position offset in measures from start of song")
     measures: int = pydantic.Field(description="Number of measures in the loop")
-    repeat: int = pydantic.Field(description="Number of times to repeat the loop")
+    extend_measures: int = pydantic.Field(description="Number of extra measures to add (or subtract) from the loop")
     midi_events: list[dict] = pydantic.Field(description="MIDI events in the loop")
     track_id: str = pydantic.Field(description="ID of the parent track")
     created_at: str = pydantic.Field(description="ISO timestamp of creation")
@@ -48,7 +48,7 @@ class CreateLoopRequest(pydantic.BaseModel):
 
     track_id: str = pydantic.Field(description="ID of the parent track")
     measures: int = pydantic.Field(ge=0, le=32, description="Number of measures in the loop (1-32)")
-    repeat: int = pydantic.Field(default=1, gt=0, description="Number of times to repeat the loop (default: 1)")
+    extend_measures: int = pydantic.Field(default=0, description="Number of extra measures to add (or subtract) from the loop (default: 0)")
 
 
 class ChatHistoryResponse(pydantic.BaseModel):
@@ -70,7 +70,7 @@ class PatchLoopRequest(pydantic.BaseModel):
     """Request model for updating a loop."""
 
     offset: int | None = pydantic.Field(None, ge=0, description="Position offset in measures (optional)")
-    repeat: int | None = pydantic.Field(None, gt=0, description="Number of times to repeat (optional)")
+    extend_measures: int | None = pydantic.Field(None, description="Number of extra measures to add (or subtract) from the loop (optional)")
     track_id: str | None = pydantic.Field(None, description="ID of the parent track (optional)")
 
     model_config = ConfigDict(from_attributes=True)

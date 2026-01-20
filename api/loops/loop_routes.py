@@ -4,6 +4,7 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from api import auth, database
@@ -32,7 +33,7 @@ async def create_loop(
     # Create new loop with empty MIDI events
     new_loop = loop_models.MidiLoop(
         measures=request.measures,
-        repeat=request.repeat,
+        extend_measures=request.extend_measures,
         midi_events=[],
         track_id=request.track_id,
     )
@@ -89,7 +90,7 @@ async def update_loop(
     user_id: UUID = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopResponse:
     """
-    Update a loop's offset, repeat, or track_id.
+    Update a loop's offset, extend_measures, or track_id.
     All fields are optional - only provided fields will be updated.
     """
     loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
@@ -101,8 +102,8 @@ async def update_loop(
     if request.offset is not None:
         loop.offset = request.offset
 
-    if request.repeat is not None:
-        loop.repeat = request.repeat
+    if request.extend_measures is not None:
+        loop.extend_measures = request.extend_measures
 
     if request.track_id is not None:
         track = track_utils.get_track_for_user(db, user_id, request.track_id)
@@ -156,3 +157,57 @@ async def append_chat(
     )
 
     return loop.to_detail_response()
+
+
+@router.get("/loops/{loop_id}/download")
+async def download_loop_wav(
+    loop_id: str,
+    db: Session = Depends(database.get_db),
+    user_id: UUID = Depends(auth.get_current_user_id),
+) -> StreamingResponse:
+    """
+    Download a loop as a WAV file.
+
+    Renders the loop to audio using the instrument samples and returns it as a downloadable WAV file.
+    """
+    # Get loop with track and song information
+    loop: loop_models.MidiLoop | None = (
+        db.query(loop_models.MidiLoop)
+        .join(track_models.MidiTrack, loop_models.MidiLoop.track_id == track_models.MidiTrack.id)
+        .join(song_models.MidiSong, track_models.MidiTrack.song_id == song_models.MidiSong.id)
+        .options(
+            joinedload(loop_models.MidiLoop.track).joinedload(track_models.MidiTrack.song),
+        )
+        .filter(loop_models.MidiLoop.id == str(loop_id), song_models.MidiSong.user_id == str(user_id))
+        .first()
+    )
+
+    if not loop:
+        raise HTTPException(status_code=404, detail="Loop not found")
+
+    # Check if loop has MIDI events
+    if not loop.midi_events:
+        raise HTTPException(status_code=400, detail="Loop has no MIDI events to render")
+
+    track = loop.track
+    song = track.song
+
+    # Render loop to WAV
+    try:
+        wav_buffer = track_utils.render_loop_to_wav(db, loop, track, song)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to render loop: {str(e)}")
+
+    # Generate filename
+    filename = f"loop_{loop_id[:8]}.wav"
+
+    # Return as streaming response
+    return StreamingResponse(
+        wav_buffer,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )

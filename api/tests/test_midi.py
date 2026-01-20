@@ -337,7 +337,7 @@ class TestSongEndpoints:
         loop = MidiLoop(
             title="Test Loop",
             measures=4,
-            repeat=2,
+            extend_measures=4,
             midi_events=[{"measure": 1, "beat": 1, "event": "C4", "value": 80}],
             track_id=track.id,
         )

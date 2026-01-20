@@ -1,24 +1,40 @@
 import { useMemo } from "react";
-import { ThemeProvider, CssBaseline, useMediaQuery } from "@mui/material";
+import { ThemeProvider as MuiThemeProvider, CssBaseline, useMediaQuery } from "@mui/material";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import ChatInterface from "./components/ChatInterface";
 import { lightTheme, darkTheme } from "./theme";
 import { PlaybackProvider } from "./contexts/PlaybackContext";
+import { ThemeProvider, useThemeMode } from "./contexts/ThemeContext";
 
-function App() {
+function AppContent() {
+  const { themeMode } = useThemeMode();
   const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
 
-  const theme = useMemo(() => (prefersDarkMode ? darkTheme : lightTheme), [prefersDarkMode]);
+  const theme = useMemo(() => {
+    // If user has selected a theme, use it
+    if (themeMode === "light") return lightTheme;
+    if (themeMode === "dark") return darkTheme;
+    // Otherwise use system default
+    return prefersDarkMode ? darkTheme : lightTheme;
+  }, [themeMode, prefersDarkMode]);
 
   return (
-    <ThemeProvider theme={theme}>
+    <MuiThemeProvider theme={theme}>
       <CssBaseline />
       <DndProvider backend={HTML5Backend}>
         <PlaybackProvider>
           <ChatInterface />
         </PlaybackProvider>
       </DndProvider>
+    </MuiThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
     </ThemeProvider>
   );
 }
