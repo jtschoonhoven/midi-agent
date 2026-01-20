@@ -49,9 +49,7 @@ def render_loop_to_wav(
 
     # Get instrument and samples from database
     instrument = (
-        db.query(instrument_models.Instrument)
-        .filter(instrument_models.Instrument.type == track.instrument)
-        .first()
+        db.query(instrument_models.Instrument).filter(instrument_models.Instrument.type == track.instrument).first()
     )
 
     if not instrument:
@@ -90,12 +88,7 @@ def render_loop_to_wav(
     def event_time_in_seconds(measure: int, beat: int, beat_div4: int, beat_div16: int) -> float:
         """Calculate the time in seconds for a MIDI event."""
         # Convert to 0-indexed
-        beat_position = (
-            (measure - 1) * beats_per_measure +
-            (beat - 1) +
-            (beat_div4 - 1) / 4.0 +
-            (beat_div16 - 1) / 16.0
-        )
+        beat_position = (measure - 1) * beats_per_measure + (beat - 1) + (beat_div4 - 1) / 4.0 + (beat_div16 - 1) / 16.0
         return beat_position / beats_per_second
 
     # Process MIDI events and render

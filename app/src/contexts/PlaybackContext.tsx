@@ -242,7 +242,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       // How many (fractional) beats have elapsed since the last frame
       const beatDelta = timeDeltaMs * beatsPerMs;
-      const prevBeat = currentBeatRef.current;
+      let prevBeat = currentBeatRef.current;
       let curBeat = Math.max(0, prevBeat) + beatDelta;
 
       // Check if loop zone is active and handle looping
@@ -252,6 +252,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // If we've gone past the loop end, jump back to loop start
         if (curBeat >= loopEnd) {
           curBeat = loopStart;
+          // Adjust prevBeat so events at the loop start will fire
+          prevBeat = loopStart - 0.01;
         }
       }
 
