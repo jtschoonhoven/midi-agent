@@ -4,1541 +4,1233 @@
  */
 
 export interface paths {
-  "/api/midi/songs/": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/songs/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Songs
+         * @description List all songs for the current user.
+         *
+         *     Args:
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         List of SongResponse objects
+         *
+         *     Raises:
+         *         HTTPException: If retrieval fails
+         */
+        get: operations["list_songs_api_midi_songs__get"];
+        put?: never;
+        /**
+         * Create Song
+         * @description Create a new song with three default tracks (piano, bass, drums).
+         */
+        post: operations["create_song_api_midi_songs__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Songs
-     * @description List all songs for the current user.
-     *
-     *     Args:
-     *         db: Database session
-     *         user_id: User ID from Authorization header
-     *
-     *     Returns:
-     *         List of SongResponse objects
-     *
-     *     Raises:
-     *         HTTPException: If retrieval fails
-     */
-    get: operations["list_songs_api_midi_songs__get"];
-    put?: never;
-    /**
-     * Create Song
-     * @description Create a new song with three default tracks (piano, bass, drums).
-     */
-    post: operations["create_song_api_midi_songs__post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/songs/{song_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/songs/{song_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Song
+         * @description Get a specific song with all track details and loops.
+         *
+         *     Args:
+         *         song_id: Song identifier (path parameter)
+         *         db: Database session
+         *         user_id: User ID from Authorization header
+         *
+         *     Returns:
+         *         SongDetailResponse with tracks and loops
+         *
+         *     Raises:
+         *         HTTPException: If song not found or access denied
+         */
+        get: operations["get_song_api_midi_songs__song_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get Song
-     * @description Get a specific song with all track details and loops.
-     *
-     *     Args:
-     *         song_id: Song identifier (path parameter)
-     *         db: Database session
-     *         user_id: User ID from Authorization header
-     *
-     *     Returns:
-     *         SongDetailResponse with tracks and loops
-     *
-     *     Raises:
-     *         HTTPException: If song not found or access denied
-     */
-    get: operations["get_song_api_midi_songs__song_id__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/instruments": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/instruments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Instruments
+         * @description List all instrument samples in the public/instruments folder.
+         */
+        get: operations["list_instruments_api_midi_instruments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Instruments
-     * @description List all instrument samples in the public/instruments folder.
-     */
-    get: operations["list_instruments_api_midi_instruments_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/loops/": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/loops/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Loop
+         * @description Create a new MIDI loop.
+         */
+        post: operations["create_loop_api_midi_loops__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Create Loop
-     * @description Create a new MIDI loop.
-     */
-    post: operations["create_loop_api_midi_loops__post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/loops/{loop_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/loops/{loop_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Loop
+         * @description Get a specific loop with all chat messages.
+         */
+        get: operations["get_loop_api_midi_loops__loop_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Loop
+         * @description Delete a loop and all associated chat messages.
+         *
+         *     The chat messages are automatically deleted via cascade relationship.
+         */
+        delete: operations["delete_loop_api_midi_loops__loop_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Loop
+         * @description Update a loop's offset, extend_measures, or track_id.
+         *     All fields are optional - only provided fields will be updated.
+         */
+        patch: operations["update_loop_api_midi_loops__loop_id__patch"];
+        trace?: never;
     };
-    /**
-     * Get Loop
-     * @description Get a specific loop with all chat messages.
-     */
-    get: operations["get_loop_api_midi_loops__loop_id__get"];
-    put?: never;
-    post?: never;
-    /**
-     * Delete Loop
-     * @description Delete a loop and all associated chat messages.
-     *
-     *     The chat messages are automatically deleted via cascade relationship.
-     */
-    delete: operations["delete_loop_api_midi_loops__loop_id__delete"];
-    options?: never;
-    head?: never;
-    /**
-     * Update Loop
-     * @description Update a loop's offset, extend_measures, or track_id.
-     *     All fields are optional - only provided fields will be updated.
-     */
-    patch: operations["update_loop_api_midi_loops__loop_id__patch"];
-    trace?: never;
-  };
-  "/api/midi/loops/{loop_id}/chats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/loops/{loop_id}/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append Chat
+         * @description Create a new user chat message for a loop.
+         */
+        post: operations["append_chat_api_midi_loops__loop_id__chats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Append Chat
-     * @description Create a new user chat message for a loop.
-     */
-    post: operations["append_chat_api_midi_loops__loop_id__chats_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/loops/{loop_id}/download": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/loops/{loop_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Loop Wav
+         * @description Download a loop as a WAV file.
+         *
+         *     Renders the loop to audio using the instrument samples and returns it as a downloadable WAV file.
+         */
+        get: operations["download_loop_wav_api_midi_loops__loop_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Download Loop Wav
-     * @description Download a loop as a WAV file.
-     *
-     *     Renders the loop to audio using the instrument samples and returns it as a downloadable WAV file.
-     */
-    get: operations["download_loop_wav_api_midi_loops__loop_id__download_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/tracks/": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/tracks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Track
+         * @description Create a new MIDI track for a song.
+         *
+         *     The MIDI channel is automatically assigned as the next available channel
+         *     based on existing tracks in the song (max channel + 1).
+         *
+         *     The track color is automatically assigned cyclically from the color palette.
+         */
+        post: operations["create_track_api_midi_tracks__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Create Track
-     * @description Create a new MIDI track for a song.
-     *
-     *     The MIDI channel is automatically assigned as the next available channel
-     *     based on existing tracks in the song (max channel + 1).
-     *
-     *     The track color is automatically assigned cyclically from the color palette.
-     */
-    post: operations["create_track_api_midi_tracks__post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/midi/tracks/{track_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/midi/tracks/{track_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Track
+         * @description Delete a track and all associated loops.
+         *
+         *     The loops are automatically deleted via cascade relationship.
+         */
+        delete: operations["delete_track_api_midi_tracks__track_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Track
+         * @description Update a track's title, MIDI channel, instrument, and/or color.
+         *     All fields are optional - only provided fields will be updated.
+         */
+        patch: operations["update_track_api_midi_tracks__track_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * Delete Track
-     * @description Delete a track and all associated loops.
-     *
-     *     The loops are automatically deleted via cascade relationship.
-     */
-    delete: operations["delete_track_api_midi_tracks__track_id__delete"];
-    options?: never;
-    head?: never;
-    /**
-     * Update Track
-     * @description Update a track's title, MIDI channel, instrument, and/or color.
-     *     All fields are optional - only provided fields will be updated.
-     */
-    patch: operations["update_track_api_midi_tracks__track_id__patch"];
-    trace?: never;
-  };
-  "/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health Check
+         * @description Health check endpoint.
+         */
+        get: operations["health_check_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Health Check
-     * @description Health check endpoint.
-     */
-    get: operations["health_check_health_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /**
-     * AppendChatRequest
-     * @description Request model for appending a new chat message to a loop.
-     */
-    AppendChatRequest: {
-      /**
-       * Loop Id
-       * @description ID of the loop to add the chat message to
-       */
-      loop_id: string;
-      /**
-       * Msg
-       * @description User message content
-       */
-      msg: string;
-      /**
-       * Measures
-       * @description Number of measures in the loop (1-32)
-       */
-      measures: number;
+    schemas: {
+        /**
+         * AppendChatRequest
+         * @description Request model for appending a new chat message to a loop.
+         */
+        AppendChatRequest: {
+            /**
+             * Loop Id
+             * @description ID of the loop to add the chat message to
+             */
+            loop_id: string;
+            /**
+             * Msg
+             * @description User message content
+             */
+            msg: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop (1-32)
+             */
+            measures: number;
+        };
+        /**
+         * ChatMessageResponse
+         * @description Response model for chat messages.
+         */
+        ChatMessageResponse: {
+            /**
+             * Id
+             * @description Chat message ID
+             */
+            id: string;
+            /**
+             * Role
+             * @description Message role: 'user' or 'assistant'
+             */
+            role: string;
+            /**
+             * Msg
+             * @description Message content
+             */
+            msg: string;
+            /**
+             * Midi Events
+             * @description MIDI events (if any)
+             */
+            midi_events?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Loop Id
+             * @description ID of the associated loop
+             */
+            loop_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of message creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
+        /**
+         * CreateLoopRequest
+         * @description Request model for creating a new loop.
+         */
+        CreateLoopRequest: {
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Measures
+             * @description Number of measures in the loop (1-32)
+             */
+            measures: number;
+            /**
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop (default: 0)
+             * @default 0
+             */
+            extend_measures: number;
+        };
+        /**
+         * CreateSongRequest
+         * @description Request payload for creating a new song.
+         */
+        CreateSongRequest: {
+            /**
+             * Title
+             * @description Song title (optional)
+             */
+            title?: string | null;
+            /**
+             * Bpm
+             * @description Tempo in BPM (30-360)
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             * @enum {string}
+             */
+            key: "Ab" | "A" | "A#" | "Bb" | "B" | "C" | "C#" | "Db" | "D" | "D#" | "Eb" | "E" | "F" | "F#" | "Gb" | "G" | "G#" | "Abm" | "Am" | "A#m" | "Bbm" | "Bm" | "Cm" | "C#m" | "Dbm" | "Dm" | "D#m" | "Ebm" | "Em" | "Fm" | "F#m" | "Gbm" | "Gm" | "G#m";
+            /**
+             * Time Signature
+             * @description Time signature
+             * @enum {string}
+             */
+            time_signature: "3/4" | "4/4" | "5/4" | "6/8" | "7/8";
+        };
+        /**
+         * CreateTrackRequest
+         * @description Request model for creating a new track.
+         */
+        CreateTrackRequest: {
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Title
+             * @description Track title
+             */
+            title: string;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InstrumentResponse
+         * @description Response model for instruments.
+         */
+        InstrumentResponse: {
+            /**
+             * Id
+             * @description Instrument ID
+             */
+            id: string;
+            /**
+             * Title
+             * @description Instrument title
+             */
+            title: string;
+            /**
+             * Type
+             * @description Instrument type
+             * @enum {string}
+             */
+            type: "piano" | "bass" | "drum";
+            /**
+             * License Type
+             * @description Instrument license type
+             * @enum {string}
+             */
+            license_type: "GNU_GPL_V3" | "BSD3";
+            /**
+             * License Uri
+             * @description Instrument license URI
+             */
+            license_uri: string;
+            /**
+             * Samples
+             * @description Instrument samples
+             */
+            samples: components["schemas"]["InstrumentSampleResponse"][];
+        };
+        /**
+         * InstrumentSampleResponse
+         * @description Response model for instrument samples.
+         */
+        InstrumentSampleResponse: {
+            /**
+             * Id
+             * @description Sample ID
+             */
+            id: string;
+            /**
+             * Uri
+             * @description Sample URI
+             */
+            uri: string;
+            /**
+             * Midi Event
+             * @description MIDI event name
+             * @enum {string}
+             */
+            midi_event: "C-1" | "C#-1" | "Db-1" | "D-1" | "D#-1" | "Eb-1" | "E-1" | "F-1" | "F#-1" | "Gb-1" | "G-1" | "G#-1" | "Ab-1" | "A-1" | "A#-1" | "Bb-1" | "B-1" | "C0" | "C#0" | "Db0" | "D0" | "D#0" | "Eb0" | "E0" | "F0" | "F#0" | "Gb0" | "G0" | "G#0" | "Ab0" | "A0" | "A#0" | "Bb0" | "B0" | "C1" | "C#1" | "Db1" | "D1" | "D#1" | "Eb1" | "E1" | "F1" | "F#1" | "Gb1" | "G1" | "G#1" | "Ab1" | "A1" | "A#1" | "Bb1" | "B1" | "C2" | "C#2" | "Db2" | "D2" | "D#2" | "Eb2" | "E2" | "F2" | "F#2" | "Gb2" | "G2" | "G#2" | "Ab2" | "A2" | "A#2" | "Bb2" | "B2" | "C3" | "C#3" | "Db3" | "D3" | "D#3" | "Eb3" | "E3" | "F3" | "F#3" | "Gb3" | "G3" | "G#3" | "Ab3" | "A3" | "A#3" | "Bb3" | "B3" | "C4" | "C#4" | "Db4" | "D4" | "D#4" | "Eb4" | "E4" | "F4" | "F#4" | "Gb4" | "G4" | "G#4" | "Ab4" | "A4" | "A#4" | "Bb4" | "B4" | "C5" | "C#5" | "Db5" | "D5" | "D#5" | "Eb5" | "E5" | "F5" | "F#5" | "Gb5" | "G5" | "G#5" | "Ab5" | "A5" | "A#5" | "Bb5" | "B5" | "C6" | "C#6" | "Db6" | "D6" | "D#6" | "Eb6" | "E6" | "F6" | "F#6" | "Gb6" | "G6" | "G#6" | "Ab6" | "A6" | "A#6" | "Bb6" | "B6" | "C7" | "C#7" | "Db7" | "D7" | "D#7" | "Eb7" | "E7" | "F7" | "F#7" | "Gb7" | "G7" | "G#7" | "Ab7" | "A7" | "A#7" | "Bb7" | "B7" | "C8" | "C#8" | "Db8" | "D8" | "D#8" | "Eb8" | "E8" | "F8" | "F#8" | "Gb8" | "G8" | "G#8" | "Ab8" | "A8" | "A#8" | "Bb8" | "B8" | "C9" | "C#9" | "Db9" | "D9" | "D#9" | "Eb9" | "E9" | "F9" | "F#9" | "Gb9" | "G9" | "acousticbassdrum" | "lowbassdrum" | "lobassdrum" | "electricbassdrum" | "highbassdrum" | "hibassdrum" | "sidestick" | "acousticsnare" | "handclap" | "electricsnare" | "rimshot" | "lowfloortom" | "lofloortom" | "closedhihat" | "highfloortom" | "hifloortom" | "pedalhihat" | "lowtom" | "lotom" | "openhihat" | "lowmidtom" | "lomidtom" | "highmidtom" | "himidtom" | "crashcymbal1" | "hightom" | "hitom" | "ridecymbal1" | "chinesecymbal" | "ridebell" | "tambourine" | "splashcymbal" | "cowbell" | "crashcymbal2" | "vibraslap" | "ridecymbal2" | "highbongo" | "hibongo" | "lowbongo" | "lobongo" | "mutehighconga" | "mutehiconga" | "openhighconga" | "openhiconga" | "lowconga" | "loconga" | "hightimbale" | "hitimbale" | "lowtimbale" | "lotimbale" | "highagogo" | "hiagogo" | "highagogô" | "hiagogô" | "highagog" | "hiagog" | "lowagogo" | "loagogo" | "lowagogô" | "loagogô" | "lowagog" | "loagog" | "cabasa" | "maracas" | "shortwhistle" | "longwhistle" | "shortguiro" | "shortgüiro" | "shortgiro" | "longguiro" | "longgüiro" | "longgiro" | "claves" | "highwoodblock" | "hiwoodblock" | "lowwoodblock" | "lowoodblock" | "mutecuica" | "mutecuíca" | "opencuica" | "opencuíca" | "mutetriangle" | "opentriangle" | "modwheel" | "modulationwheel" | "sustain" | "sustainpedal" | "allnotesoff" | "allnoteson" | "allnotesoffon" | "resetallcontrollers";
+        };
+        /**
+         * ListInstrumentsResponse
+         * @description Response model for listing instruments.
+         */
+        ListInstrumentsResponse: {
+            /**
+             * Instruments
+             * @description Instruments
+             */
+            instruments: components["schemas"]["InstrumentResponse"][];
+        };
+        /**
+         * LoopDetailResponse
+         * @description Response model for MIDI loops, including chat message history.
+         */
+        LoopDetailResponse: {
+            /**
+             * Id
+             * @description Loop ID
+             */
+            id: string;
+            /**
+             * Offset
+             * @description Position offset in measures from start of song
+             */
+            offset: number;
+            /**
+             * Measures
+             * @description Number of measures in the loop
+             */
+            measures: number;
+            /**
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop
+             */
+            extend_measures: number;
+            /**
+             * Midi Events
+             * @description MIDI events in the loop
+             */
+            midi_events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
+             * Chats
+             * @description Chat messages in chronological order
+             */
+            chats?: components["schemas"]["ChatMessageResponse"][];
+        };
+        /**
+         * LoopResponse
+         * @description Response model for MIDI loops, excluding chat message history.
+         */
+        LoopResponse: {
+            /**
+             * Id
+             * @description Loop ID
+             */
+            id: string;
+            /**
+             * Offset
+             * @description Position offset in measures from start of song
+             */
+            offset: number;
+            /**
+             * Measures
+             * @description Number of measures in the loop
+             */
+            measures: number;
+            /**
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop
+             */
+            extend_measures: number;
+            /**
+             * Midi Events
+             * @description MIDI events in the loop
+             */
+            midi_events: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Track Id
+             * @description ID of the parent track
+             */
+            track_id: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
+        /**
+         * PatchLoopRequest
+         * @description Request model for updating a loop.
+         */
+        PatchLoopRequest: {
+            /**
+             * Offset
+             * @description Position offset in measures (optional)
+             */
+            offset?: number | null;
+            /**
+             * Extend Measures
+             * @description Number of extra measures to add (or subtract) from the loop (optional)
+             */
+            extend_measures?: number | null;
+            /**
+             * Track Id
+             * @description ID of the parent track (optional)
+             */
+            track_id?: string | null;
+        };
+        /**
+         * PatchTrackRequest
+         * @description Request model for updating a track.
+         */
+        PatchTrackRequest: {
+            /**
+             * Title
+             * @description Track title (optional)
+             */
+            title?: string | null;
+            /**
+             * Midi Channel
+             * @description MIDI channel 1-16 (optional)
+             */
+            midi_channel?: number | null;
+            /**
+             * Instrument
+             * @description Instrument type (optional)
+             */
+            instrument?: ("piano" | "bass" | "drum") | null;
+            /**
+             * Color
+             * @description Color theme (optional)
+             */
+            color?: ("error" | "warning" | "success" | "info" | "primary" | "secondary") | null;
+        };
+        /**
+         * SongDetailResponse
+         * @description Response model for MIDI songs including tracks and loops.
+         */
+        SongDetailResponse: {
+            /**
+             * Id
+             * @description Song ID
+             */
+            id: string;
+            /**
+             * Title
+             * @description Song title
+             */
+            title: string;
+            /**
+             * Bpm
+             * @description Tempo in BPM
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             */
+            key: string;
+            /**
+             * Time Signature
+             * @description Time signature
+             */
+            time_signature: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
+             * Tracks
+             * @description Tracks in this song
+             */
+            tracks: components["schemas"]["TrackDetailResponse"][];
+        };
+        /**
+         * SongResponse
+         * @description Response model for MIDI songs including tracks and loops.
+         */
+        SongResponse: {
+            /**
+             * Id
+             * @description Song ID
+             */
+            id: string;
+            /**
+             * Title
+             * @description Song title
+             */
+            title: string;
+            /**
+             * Bpm
+             * @description Tempo in BPM
+             */
+            bpm: number;
+            /**
+             * Key
+             * @description Musical key
+             */
+            key: string;
+            /**
+             * Time Signature
+             * @description Time signature
+             */
+            time_signature: string;
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
+        /**
+         * TrackDetailResponse
+         * @description Response model for MIDI tracks including loops.
+         */
+        TrackDetailResponse: {
+            /**
+             * Id
+             * @description Track ID
+             */
+            id: string;
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Title
+             * @description Track title
+             */
+            title: string;
+            /**
+             * Midi Channel
+             * @description MIDI channel (1-16)
+             */
+            midi_channel: number;
+            /**
+             * Instrument
+             * @description Instrument type for this track
+             * @enum {string}
+             */
+            instrument: "piano" | "bass" | "drum";
+            /**
+             * Color
+             * @description Color theme for this track
+             * @enum {string}
+             */
+            color: "error" | "warning" | "success" | "info" | "primary" | "secondary";
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+            /**
+             * Loops
+             * @description Loops in this track
+             */
+            loops: components["schemas"]["LoopResponse"][];
+        };
+        /**
+         * TrackResponse
+         * @description Response model for MIDI tracks (excludes loops).
+         */
+        TrackResponse: {
+            /**
+             * Id
+             * @description Track ID
+             */
+            id: string;
+            /**
+             * Song Id
+             * @description ID of the parent song
+             */
+            song_id: string;
+            /**
+             * Title
+             * @description Track title
+             */
+            title: string;
+            /**
+             * Midi Channel
+             * @description MIDI channel (1-16)
+             */
+            midi_channel: number;
+            /**
+             * Instrument
+             * @description Instrument type for this track
+             * @enum {string}
+             */
+            instrument: "piano" | "bass" | "drum";
+            /**
+             * Color
+             * @description Color theme for this track
+             * @enum {string}
+             */
+            color: "error" | "warning" | "success" | "info" | "primary" | "secondary";
+            /**
+             * Created At
+             * @description ISO timestamp of creation
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * @description ISO timestamp of last update
+             */
+            updated_at: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
     };
-    /**
-     * ChatMessageResponse
-     * @description Response model for chat messages.
-     */
-    ChatMessageResponse: {
-      /**
-       * Id
-       * @description Chat message ID
-       */
-      id: string;
-      /**
-       * Role
-       * @description Message role: 'user' or 'assistant'
-       */
-      role: string;
-      /**
-       * Msg
-       * @description Message content
-       */
-      msg: string;
-      /**
-       * Midi Events
-       * @description MIDI events (if any)
-       */
-      midi_events?:
-        | {
-            [key: string]: unknown;
-          }[]
-        | null;
-      /**
-       * Loop Id
-       * @description ID of the associated loop
-       */
-      loop_id: string;
-      /**
-       * Created At
-       * @description ISO timestamp of message creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-    };
-    /**
-     * CreateLoopRequest
-     * @description Request model for creating a new loop.
-     */
-    CreateLoopRequest: {
-      /**
-       * Track Id
-       * @description ID of the parent track
-       */
-      track_id: string;
-      /**
-       * Measures
-       * @description Number of measures in the loop (1-32)
-       */
-      measures: number;
-      /**
-       * Extend Measures
-       * @description Number of extra measures to add (or subtract) from the loop (default: 0)
-       * @default 0
-       */
-      extend_measures: number;
-    };
-    /**
-     * CreateSongRequest
-     * @description Request payload for creating a new song.
-     */
-    CreateSongRequest: {
-      /**
-       * Title
-       * @description Song title (optional)
-       */
-      title?: string | null;
-      /**
-       * Bpm
-       * @description Tempo in BPM (30-360)
-       */
-      bpm: number;
-      /**
-       * Key
-       * @description Musical key
-       * @enum {string}
-       */
-      key:
-        | "Ab"
-        | "A"
-        | "A#"
-        | "Bb"
-        | "B"
-        | "C"
-        | "C#"
-        | "Db"
-        | "D"
-        | "D#"
-        | "Eb"
-        | "E"
-        | "F"
-        | "F#"
-        | "Gb"
-        | "G"
-        | "G#"
-        | "Abm"
-        | "Am"
-        | "A#m"
-        | "Bbm"
-        | "Bm"
-        | "Cm"
-        | "C#m"
-        | "Dbm"
-        | "Dm"
-        | "D#m"
-        | "Ebm"
-        | "Em"
-        | "Fm"
-        | "F#m"
-        | "Gbm"
-        | "Gm"
-        | "G#m";
-      /**
-       * Time Signature
-       * @description Time signature
-       * @enum {string}
-       */
-      time_signature: "3/4" | "4/4" | "5/4" | "6/8" | "7/8";
-    };
-    /**
-     * CreateTrackRequest
-     * @description Request model for creating a new track.
-     */
-    CreateTrackRequest: {
-      /**
-       * Song Id
-       * @description ID of the parent song
-       */
-      song_id: string;
-      /**
-       * Title
-       * @description Track title
-       */
-      title: string;
-    };
-    /** HTTPValidationError */
-    HTTPValidationError: {
-      /** Detail */
-      detail?: components["schemas"]["ValidationError"][];
-    };
-    /**
-     * InstrumentResponse
-     * @description Response model for instruments.
-     */
-    InstrumentResponse: {
-      /**
-       * Id
-       * @description Instrument ID
-       */
-      id: string;
-      /**
-       * Title
-       * @description Instrument title
-       */
-      title: string;
-      /**
-       * Type
-       * @description Instrument type
-       * @enum {string}
-       */
-      type: "piano" | "bass" | "drum";
-      /**
-       * License Type
-       * @description Instrument license type
-       * @enum {string}
-       */
-      license_type: "GNU_GPL_V3" | "BSD3";
-      /**
-       * License Uri
-       * @description Instrument license URI
-       */
-      license_uri: string;
-      /**
-       * Samples
-       * @description Instrument samples
-       */
-      samples: components["schemas"]["InstrumentSampleResponse"][];
-    };
-    /**
-     * InstrumentSampleResponse
-     * @description Response model for instrument samples.
-     */
-    InstrumentSampleResponse: {
-      /**
-       * Id
-       * @description Sample ID
-       */
-      id: string;
-      /**
-       * Uri
-       * @description Sample URI
-       */
-      uri: string;
-      /**
-       * Midi Event
-       * @description MIDI event name
-       * @enum {string}
-       */
-      midi_event:
-        | "C-1"
-        | "C#-1"
-        | "Db-1"
-        | "D-1"
-        | "D#-1"
-        | "Eb-1"
-        | "E-1"
-        | "F-1"
-        | "F#-1"
-        | "Gb-1"
-        | "G-1"
-        | "G#-1"
-        | "Ab-1"
-        | "A-1"
-        | "A#-1"
-        | "Bb-1"
-        | "B-1"
-        | "C0"
-        | "C#0"
-        | "Db0"
-        | "D0"
-        | "D#0"
-        | "Eb0"
-        | "E0"
-        | "F0"
-        | "F#0"
-        | "Gb0"
-        | "G0"
-        | "G#0"
-        | "Ab0"
-        | "A0"
-        | "A#0"
-        | "Bb0"
-        | "B0"
-        | "C1"
-        | "C#1"
-        | "Db1"
-        | "D1"
-        | "D#1"
-        | "Eb1"
-        | "E1"
-        | "F1"
-        | "F#1"
-        | "Gb1"
-        | "G1"
-        | "G#1"
-        | "Ab1"
-        | "A1"
-        | "A#1"
-        | "Bb1"
-        | "B1"
-        | "C2"
-        | "C#2"
-        | "Db2"
-        | "D2"
-        | "D#2"
-        | "Eb2"
-        | "E2"
-        | "F2"
-        | "F#2"
-        | "Gb2"
-        | "G2"
-        | "G#2"
-        | "Ab2"
-        | "A2"
-        | "A#2"
-        | "Bb2"
-        | "B2"
-        | "C3"
-        | "C#3"
-        | "Db3"
-        | "D3"
-        | "D#3"
-        | "Eb3"
-        | "E3"
-        | "F3"
-        | "F#3"
-        | "Gb3"
-        | "G3"
-        | "G#3"
-        | "Ab3"
-        | "A3"
-        | "A#3"
-        | "Bb3"
-        | "B3"
-        | "C4"
-        | "C#4"
-        | "Db4"
-        | "D4"
-        | "D#4"
-        | "Eb4"
-        | "E4"
-        | "F4"
-        | "F#4"
-        | "Gb4"
-        | "G4"
-        | "G#4"
-        | "Ab4"
-        | "A4"
-        | "A#4"
-        | "Bb4"
-        | "B4"
-        | "C5"
-        | "C#5"
-        | "Db5"
-        | "D5"
-        | "D#5"
-        | "Eb5"
-        | "E5"
-        | "F5"
-        | "F#5"
-        | "Gb5"
-        | "G5"
-        | "G#5"
-        | "Ab5"
-        | "A5"
-        | "A#5"
-        | "Bb5"
-        | "B5"
-        | "C6"
-        | "C#6"
-        | "Db6"
-        | "D6"
-        | "D#6"
-        | "Eb6"
-        | "E6"
-        | "F6"
-        | "F#6"
-        | "Gb6"
-        | "G6"
-        | "G#6"
-        | "Ab6"
-        | "A6"
-        | "A#6"
-        | "Bb6"
-        | "B6"
-        | "C7"
-        | "C#7"
-        | "Db7"
-        | "D7"
-        | "D#7"
-        | "Eb7"
-        | "E7"
-        | "F7"
-        | "F#7"
-        | "Gb7"
-        | "G7"
-        | "G#7"
-        | "Ab7"
-        | "A7"
-        | "A#7"
-        | "Bb7"
-        | "B7"
-        | "C8"
-        | "C#8"
-        | "Db8"
-        | "D8"
-        | "D#8"
-        | "Eb8"
-        | "E8"
-        | "F8"
-        | "F#8"
-        | "Gb8"
-        | "G8"
-        | "G#8"
-        | "Ab8"
-        | "A8"
-        | "A#8"
-        | "Bb8"
-        | "B8"
-        | "C9"
-        | "C#9"
-        | "Db9"
-        | "D9"
-        | "D#9"
-        | "Eb9"
-        | "E9"
-        | "F9"
-        | "F#9"
-        | "Gb9"
-        | "G9"
-        | "acousticbassdrum"
-        | "lowbassdrum"
-        | "lobassdrum"
-        | "electricbassdrum"
-        | "highbassdrum"
-        | "hibassdrum"
-        | "sidestick"
-        | "acousticsnare"
-        | "handclap"
-        | "electricsnare"
-        | "rimshot"
-        | "lowfloortom"
-        | "lofloortom"
-        | "closedhihat"
-        | "highfloortom"
-        | "hifloortom"
-        | "pedalhihat"
-        | "lowtom"
-        | "lotom"
-        | "openhihat"
-        | "lowmidtom"
-        | "lomidtom"
-        | "highmidtom"
-        | "himidtom"
-        | "crashcymbal1"
-        | "hightom"
-        | "hitom"
-        | "ridecymbal1"
-        | "chinesecymbal"
-        | "ridebell"
-        | "tambourine"
-        | "splashcymbal"
-        | "cowbell"
-        | "crashcymbal2"
-        | "vibraslap"
-        | "ridecymbal2"
-        | "highbongo"
-        | "hibongo"
-        | "lowbongo"
-        | "lobongo"
-        | "mutehighconga"
-        | "mutehiconga"
-        | "openhighconga"
-        | "openhiconga"
-        | "lowconga"
-        | "loconga"
-        | "hightimbale"
-        | "hitimbale"
-        | "lowtimbale"
-        | "lotimbale"
-        | "highagogo"
-        | "hiagogo"
-        | "highagogô"
-        | "hiagogô"
-        | "highagog"
-        | "hiagog"
-        | "lowagogo"
-        | "loagogo"
-        | "lowagogô"
-        | "loagogô"
-        | "lowagog"
-        | "loagog"
-        | "cabasa"
-        | "maracas"
-        | "shortwhistle"
-        | "longwhistle"
-        | "shortguiro"
-        | "shortgüiro"
-        | "shortgiro"
-        | "longguiro"
-        | "longgüiro"
-        | "longgiro"
-        | "claves"
-        | "highwoodblock"
-        | "hiwoodblock"
-        | "lowwoodblock"
-        | "lowoodblock"
-        | "mutecuica"
-        | "mutecuíca"
-        | "opencuica"
-        | "opencuíca"
-        | "mutetriangle"
-        | "opentriangle"
-        | "modwheel"
-        | "modulationwheel"
-        | "sustain"
-        | "sustainpedal"
-        | "allnotesoff"
-        | "allnoteson"
-        | "allnotesoffon"
-        | "resetallcontrollers";
-    };
-    /**
-     * ListInstrumentsResponse
-     * @description Response model for listing instruments.
-     */
-    ListInstrumentsResponse: {
-      /**
-       * Instruments
-       * @description Instruments
-       */
-      instruments: components["schemas"]["InstrumentResponse"][];
-    };
-    /**
-     * LoopDetailResponse
-     * @description Response model for MIDI loops, including chat message history.
-     */
-    LoopDetailResponse: {
-      /**
-       * Id
-       * @description Loop ID
-       */
-      id: string;
-      /**
-       * Offset
-       * @description Position offset in measures from start of song
-       */
-      offset: number;
-      /**
-       * Measures
-       * @description Number of measures in the loop
-       */
-      measures: number;
-      /**
-       * Extend Measures
-       * @description Number of extra measures to add (or subtract) from the loop
-       */
-      extend_measures: number;
-      /**
-       * Midi Events
-       * @description MIDI events in the loop
-       */
-      midi_events: {
-        [key: string]: unknown;
-      }[];
-      /**
-       * Track Id
-       * @description ID of the parent track
-       */
-      track_id: string;
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-      /**
-       * Chats
-       * @description Chat messages in chronological order
-       */
-      chats?: components["schemas"]["ChatMessageResponse"][];
-    };
-    /**
-     * LoopResponse
-     * @description Response model for MIDI loops, excluding chat message history.
-     */
-    LoopResponse: {
-      /**
-       * Id
-       * @description Loop ID
-       */
-      id: string;
-      /**
-       * Offset
-       * @description Position offset in measures from start of song
-       */
-      offset: number;
-      /**
-       * Measures
-       * @description Number of measures in the loop
-       */
-      measures: number;
-      /**
-       * Extend Measures
-       * @description Number of extra measures to add (or subtract) from the loop
-       */
-      extend_measures: number;
-      /**
-       * Midi Events
-       * @description MIDI events in the loop
-       */
-      midi_events: {
-        [key: string]: unknown;
-      }[];
-      /**
-       * Track Id
-       * @description ID of the parent track
-       */
-      track_id: string;
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-    };
-    /**
-     * PatchLoopRequest
-     * @description Request model for updating a loop.
-     */
-    PatchLoopRequest: {
-      /**
-       * Offset
-       * @description Position offset in measures (optional)
-       */
-      offset?: number | null;
-      /**
-       * Extend Measures
-       * @description Number of extra measures to add (or subtract) from the loop (optional)
-       */
-      extend_measures?: number | null;
-      /**
-       * Track Id
-       * @description ID of the parent track (optional)
-       */
-      track_id?: string | null;
-    };
-    /**
-     * PatchTrackRequest
-     * @description Request model for updating a track.
-     */
-    PatchTrackRequest: {
-      /**
-       * Title
-       * @description Track title (optional)
-       */
-      title?: string | null;
-      /**
-       * Midi Channel
-       * @description MIDI channel 1-16 (optional)
-       */
-      midi_channel?: number | null;
-      /**
-       * Instrument
-       * @description Instrument type (optional)
-       */
-      instrument?: ("piano" | "bass" | "drum") | null;
-      /**
-       * Color
-       * @description Color theme (optional)
-       */
-      color?: ("error" | "warning" | "success" | "info" | "primary" | "secondary") | null;
-    };
-    /**
-     * SongDetailResponse
-     * @description Response model for MIDI songs including tracks and loops.
-     */
-    SongDetailResponse: {
-      /**
-       * Id
-       * @description Song ID
-       */
-      id: string;
-      /**
-       * Title
-       * @description Song title
-       */
-      title: string;
-      /**
-       * Bpm
-       * @description Tempo in BPM
-       */
-      bpm: number;
-      /**
-       * Key
-       * @description Musical key
-       */
-      key: string;
-      /**
-       * Time Signature
-       * @description Time signature
-       */
-      time_signature: string;
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-      /**
-       * Tracks
-       * @description Tracks in this song
-       */
-      tracks: components["schemas"]["TrackDetailResponse"][];
-    };
-    /**
-     * SongResponse
-     * @description Response model for MIDI songs including tracks and loops.
-     */
-    SongResponse: {
-      /**
-       * Id
-       * @description Song ID
-       */
-      id: string;
-      /**
-       * Title
-       * @description Song title
-       */
-      title: string;
-      /**
-       * Bpm
-       * @description Tempo in BPM
-       */
-      bpm: number;
-      /**
-       * Key
-       * @description Musical key
-       */
-      key: string;
-      /**
-       * Time Signature
-       * @description Time signature
-       */
-      time_signature: string;
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-    };
-    /**
-     * TrackDetailResponse
-     * @description Response model for MIDI tracks including loops.
-     */
-    TrackDetailResponse: {
-      /**
-       * Id
-       * @description Track ID
-       */
-      id: string;
-      /**
-       * Song Id
-       * @description ID of the parent song
-       */
-      song_id: string;
-      /**
-       * Title
-       * @description Track title
-       */
-      title: string;
-      /**
-       * Midi Channel
-       * @description MIDI channel (1-16)
-       */
-      midi_channel: number;
-      /**
-       * Instrument
-       * @description Instrument type for this track
-       * @enum {string}
-       */
-      instrument: "piano" | "bass" | "drum";
-      /**
-       * Color
-       * @description Color theme for this track
-       * @enum {string}
-       */
-      color: "error" | "warning" | "success" | "info" | "primary" | "secondary";
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-      /**
-       * Loops
-       * @description Loops in this track
-       */
-      loops: components["schemas"]["LoopResponse"][];
-    };
-    /**
-     * TrackResponse
-     * @description Response model for MIDI tracks (excludes loops).
-     */
-    TrackResponse: {
-      /**
-       * Id
-       * @description Track ID
-       */
-      id: string;
-      /**
-       * Song Id
-       * @description ID of the parent song
-       */
-      song_id: string;
-      /**
-       * Title
-       * @description Track title
-       */
-      title: string;
-      /**
-       * Midi Channel
-       * @description MIDI channel (1-16)
-       */
-      midi_channel: number;
-      /**
-       * Instrument
-       * @description Instrument type for this track
-       * @enum {string}
-       */
-      instrument: "piano" | "bass" | "drum";
-      /**
-       * Color
-       * @description Color theme for this track
-       * @enum {string}
-       */
-      color: "error" | "warning" | "success" | "info" | "primary" | "secondary";
-      /**
-       * Created At
-       * @description ISO timestamp of creation
-       */
-      created_at: string;
-      /**
-       * Updated At
-       * @description ISO timestamp of last update
-       */
-      updated_at: string;
-    };
-    /** ValidationError */
-    ValidationError: {
-      /** Location */
-      loc: (string | number)[];
-      /** Message */
-      msg: string;
-      /** Error Type */
-      type: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  list_songs_api_midi_songs__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    list_songs_api_midi_songs__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongResponse"][];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    create_song_api_midi_songs__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["SongResponse"][];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSongRequest"];
+            };
         };
-      };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-  };
-  create_song_api_midi_songs__post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    get_song_api_midi_songs__song_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                song_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SongDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateSongRequest"];
-      };
+    list_instruments_api_midi_instruments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListInstrumentsResponse"];
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    create_loop_api_midi_loops__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["SongDetailResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLoopRequest"];
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  get_song_api_midi_songs__song_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        song_id: string;
-      };
-      cookie?: never;
+    get_loop_api_midi_loops__loop_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    delete_loop_api_midi_loops__loop_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["SongDetailResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  list_instruments_api_midi_instruments_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    update_loop_api_midi_loops__loop_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchLoopRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    append_chat_api_midi_loops__loop_id__chats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["ListInstrumentsResponse"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendChatRequest"];
+            };
         };
-      };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoopDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-  };
-  create_loop_api_midi_loops__post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    download_loop_wav_api_midi_loops__loop_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loop_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateLoopRequest"];
-      };
+    create_track_api_midi_tracks__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTrackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    delete_track_api_midi_tracks__track_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["LoopDetailResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  get_loop_api_midi_loops__loop_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        loop_id: string;
-      };
-      cookie?: never;
+    update_track_api_midi_tracks__track_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchTrackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    health_check_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["LoopDetailResponse"];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
     };
-  };
-  delete_loop_api_midi_loops__loop_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        loop_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_loop_api_midi_loops__loop_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        loop_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PatchLoopRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LoopResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  append_chat_api_midi_loops__loop_id__chats_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AppendChatRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["LoopDetailResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  download_loop_wav_api_midi_loops__loop_id__download_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        loop_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_track_api_midi_tracks__post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CreateTrackRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TrackDetailResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_track_api_midi_tracks__track_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        track_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_track_api_midi_tracks__track_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        track_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PatchTrackRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TrackResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  health_check_health_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            [key: string]: string;
-          };
-        };
-      };
-    };
-  };
 }

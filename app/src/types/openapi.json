@@ -8,7 +8,9 @@
   "paths": {
     "/api/midi/songs/": {
       "get": {
-        "tags": ["midi"],
+        "tags": [
+          "midi"
+        ],
         "summary": "List Songs",
         "description": "List all songs for the current user.\n\nArgs:\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    List of SongResponse objects\n\nRaises:\n    HTTPException: If retrieval fails",
         "operationId": "list_songs_api_midi_songs__get",
@@ -30,7 +32,9 @@
         }
       },
       "post": {
-        "tags": ["midi"],
+        "tags": [
+          "midi"
+        ],
         "summary": "Create Song",
         "description": "Create a new song with three default tracks (piano, bass, drums).",
         "operationId": "create_song_api_midi_songs__post",
@@ -70,7 +74,9 @@
     },
     "/api/midi/songs/{song_id}": {
       "get": {
-        "tags": ["midi"],
+        "tags": [
+          "midi"
+        ],
         "summary": "Get Song",
         "description": "Get a specific song with all track details and loops.\n\nArgs:\n    song_id: Song identifier (path parameter)\n    db: Database session\n    user_id: User ID from Authorization header\n\nReturns:\n    SongDetailResponse with tracks and loops\n\nRaises:\n    HTTPException: If song not found or access denied",
         "operationId": "get_song_api_midi_songs__song_id__get",
@@ -111,7 +117,9 @@
     },
     "/api/midi/instruments": {
       "get": {
-        "tags": ["audio"],
+        "tags": [
+          "audio"
+        ],
         "summary": "List Instruments",
         "description": "List all instrument samples in the public/instruments folder.",
         "operationId": "list_instruments_api_midi_instruments_get",
@@ -131,7 +139,9 @@
     },
     "/api/midi/loops/": {
       "post": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Create Loop",
         "description": "Create a new MIDI loop.",
         "operationId": "create_loop_api_midi_loops__post",
@@ -171,7 +181,9 @@
     },
     "/api/midi/loops/{loop_id}": {
       "get": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Get Loop",
         "description": "Get a specific loop with all chat messages.",
         "operationId": "get_loop_api_midi_loops__loop_id__get",
@@ -210,7 +222,9 @@
         }
       },
       "delete": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Delete Loop",
         "description": "Delete a loop and all associated chat messages.\n\nThe chat messages are automatically deleted via cascade relationship.",
         "operationId": "delete_loop_api_midi_loops__loop_id__delete",
@@ -242,7 +256,9 @@
         }
       },
       "patch": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Update Loop",
         "description": "Update a loop's offset, extend_measures, or track_id.\nAll fields are optional - only provided fields will be updated.",
         "operationId": "update_loop_api_midi_loops__loop_id__patch",
@@ -293,7 +309,9 @@
     },
     "/api/midi/loops/{loop_id}/chats": {
       "post": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Append Chat",
         "description": "Create a new user chat message for a loop.",
         "operationId": "append_chat_api_midi_loops__loop_id__chats_post",
@@ -333,7 +351,9 @@
     },
     "/api/midi/loops/{loop_id}/download": {
       "get": {
-        "tags": ["loops"],
+        "tags": [
+          "loops"
+        ],
         "summary": "Download Loop Wav",
         "description": "Download a loop as a WAV file.\n\nRenders the loop to audio using the instrument samples and returns it as a downloadable WAV file.",
         "operationId": "download_loop_wav_api_midi_loops__loop_id__download_get",
@@ -372,7 +392,9 @@
     },
     "/api/midi/tracks/": {
       "post": {
-        "tags": ["tracks"],
+        "tags": [
+          "tracks"
+        ],
         "summary": "Create Track",
         "description": "Create a new MIDI track for a song.\n\nThe MIDI channel is automatically assigned as the next available channel\nbased on existing tracks in the song (max channel + 1).\n\nThe track color is automatically assigned cyclically from the color palette.",
         "operationId": "create_track_api_midi_tracks__post",
@@ -412,7 +434,9 @@
     },
     "/api/midi/tracks/{track_id}": {
       "delete": {
-        "tags": ["tracks"],
+        "tags": [
+          "tracks"
+        ],
         "summary": "Delete Track",
         "description": "Delete a track and all associated loops.\n\nThe loops are automatically deleted via cascade relationship.",
         "operationId": "delete_track_api_midi_tracks__track_id__delete",
@@ -444,7 +468,9 @@
         }
       },
       "patch": {
-        "tags": ["tracks"],
+        "tags": [
+          "tracks"
+        ],
         "summary": "Update Track",
         "description": "Update a track's title, MIDI channel, instrument, and/or color.\nAll fields are optional - only provided fields will be updated.",
         "operationId": "update_track_api_midi_tracks__track_id__patch",
@@ -541,7 +567,11 @@
           }
         },
         "type": "object",
-        "required": ["loop_id", "msg", "measures"],
+        "required": [
+          "loop_id",
+          "msg",
+          "measures"
+        ],
         "title": "AppendChatRequest",
         "description": "Request model for appending a new chat message to a loop."
       },
@@ -595,7 +625,14 @@
           }
         },
         "type": "object",
-        "required": ["id", "role", "msg", "loop_id", "created_at", "updated_at"],
+        "required": [
+          "id",
+          "role",
+          "msg",
+          "loop_id",
+          "created_at",
+          "updated_at"
+        ],
         "title": "ChatMessageResponse",
         "description": "Response model for chat messages."
       },
@@ -621,7 +658,10 @@
           }
         },
         "type": "object",
-        "required": ["track_id", "measures"],
+        "required": [
+          "track_id",
+          "measures"
+        ],
         "title": "CreateLoopRequest",
         "description": "Request model for creating a new loop."
       },
@@ -689,13 +729,23 @@
           },
           "time_signature": {
             "type": "string",
-            "enum": ["3/4", "4/4", "5/4", "6/8", "7/8"],
+            "enum": [
+              "3/4",
+              "4/4",
+              "5/4",
+              "6/8",
+              "7/8"
+            ],
             "title": "Time Signature",
             "description": "Time signature"
           }
         },
         "type": "object",
-        "required": ["bpm", "key", "time_signature"],
+        "required": [
+          "bpm",
+          "key",
+          "time_signature"
+        ],
         "title": "CreateSongRequest",
         "description": "Request payload for creating a new song."
       },
@@ -714,7 +764,10 @@
           }
         },
         "type": "object",
-        "required": ["song_id", "title"],
+        "required": [
+          "song_id",
+          "title"
+        ],
         "title": "CreateTrackRequest",
         "description": "Request model for creating a new track."
       },
@@ -745,13 +798,20 @@
           },
           "type": {
             "type": "string",
-            "enum": ["piano", "bass", "drum"],
+            "enum": [
+              "piano",
+              "bass",
+              "drum"
+            ],
             "title": "Type",
             "description": "Instrument type"
           },
           "license_type": {
             "type": "string",
-            "enum": ["GNU_GPL_V3", "BSD3"],
+            "enum": [
+              "GNU_GPL_V3",
+              "BSD3"
+            ],
             "title": "License Type",
             "description": "Instrument license type"
           },
@@ -770,7 +830,14 @@
           }
         },
         "type": "object",
-        "required": ["id", "title", "type", "license_type", "license_uri", "samples"],
+        "required": [
+          "id",
+          "title",
+          "type",
+          "license_type",
+          "license_uri",
+          "samples"
+        ],
         "title": "InstrumentResponse",
         "description": "Response model for instruments."
       },
@@ -1067,7 +1134,11 @@
           }
         },
         "type": "object",
-        "required": ["id", "uri", "midi_event"],
+        "required": [
+          "id",
+          "uri",
+          "midi_event"
+        ],
         "title": "InstrumentSampleResponse",
         "description": "Response model for instrument samples."
       },
@@ -1083,7 +1154,9 @@
           }
         },
         "type": "object",
-        "required": ["instruments"],
+        "required": [
+          "instruments"
+        ],
         "title": "ListInstrumentsResponse",
         "description": "Response model for listing instruments."
       },
@@ -1294,7 +1367,11 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["piano", "bass", "drum"]
+                "enum": [
+                  "piano",
+                  "bass",
+                  "drum"
+                ]
               },
               {
                 "type": "null"
@@ -1307,7 +1384,14 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": ["error", "warning", "success", "info", "primary", "secondary"]
+                "enum": [
+                  "error",
+                  "warning",
+                  "success",
+                  "info",
+                  "primary",
+                  "secondary"
+                ]
               },
               {
                 "type": "null"
@@ -1368,7 +1452,16 @@
           }
         },
         "type": "object",
-        "required": ["id", "title", "bpm", "key", "time_signature", "created_at", "updated_at", "tracks"],
+        "required": [
+          "id",
+          "title",
+          "bpm",
+          "key",
+          "time_signature",
+          "created_at",
+          "updated_at",
+          "tracks"
+        ],
         "title": "SongDetailResponse",
         "description": "Response model for MIDI songs including tracks and loops."
       },
@@ -1411,7 +1504,15 @@
           }
         },
         "type": "object",
-        "required": ["id", "title", "bpm", "key", "time_signature", "created_at", "updated_at"],
+        "required": [
+          "id",
+          "title",
+          "bpm",
+          "key",
+          "time_signature",
+          "created_at",
+          "updated_at"
+        ],
         "title": "SongResponse",
         "description": "Response model for MIDI songs including tracks and loops."
       },
@@ -1440,13 +1541,24 @@
           },
           "instrument": {
             "type": "string",
-            "enum": ["piano", "bass", "drum"],
+            "enum": [
+              "piano",
+              "bass",
+              "drum"
+            ],
             "title": "Instrument",
             "description": "Instrument type for this track"
           },
           "color": {
             "type": "string",
-            "enum": ["error", "warning", "success", "info", "primary", "secondary"],
+            "enum": [
+              "error",
+              "warning",
+              "success",
+              "info",
+              "primary",
+              "secondary"
+            ],
             "title": "Color",
             "description": "Color theme for this track"
           },
@@ -1509,13 +1621,24 @@
           },
           "instrument": {
             "type": "string",
-            "enum": ["piano", "bass", "drum"],
+            "enum": [
+              "piano",
+              "bass",
+              "drum"
+            ],
             "title": "Instrument",
             "description": "Instrument type for this track"
           },
           "color": {
             "type": "string",
-            "enum": ["error", "warning", "success", "info", "primary", "secondary"],
+            "enum": [
+              "error",
+              "warning",
+              "success",
+              "info",
+              "primary",
+              "secondary"
+            ],
             "title": "Color",
             "description": "Color theme for this track"
           },
@@ -1531,7 +1654,16 @@
           }
         },
         "type": "object",
-        "required": ["id", "song_id", "title", "midi_channel", "instrument", "color", "created_at", "updated_at"],
+        "required": [
+          "id",
+          "song_id",
+          "title",
+          "midi_channel",
+          "instrument",
+          "color",
+          "created_at",
+          "updated_at"
+        ],
         "title": "TrackResponse",
         "description": "Response model for MIDI tracks (excludes loops)."
       },
@@ -1561,7 +1693,11 @@
           }
         },
         "type": "object",
-        "required": ["loc", "msg", "type"],
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
         "title": "ValidationError"
       }
     }

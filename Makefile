@@ -1,7 +1,7 @@
 .PHONY: api app up fmt lint mypy check types test eval reset-db
 
 api:
-	uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8246
 
 app:
 	cd app && npm run dev
@@ -29,6 +29,10 @@ check: lint mypy
 # Generate typescript bindings for the API
 types:
 	cd app && npm run generate:types
+
+
+build: types
+	cd app && npm run build
 
 test:
 	uv run pytest api/tests/ -v

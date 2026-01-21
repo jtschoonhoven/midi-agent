@@ -11,7 +11,7 @@ async function getTone() {
 }
 
 // API base URL for loading samples
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8246";
 
 interface MidiEvent {
   measure: number;
@@ -388,7 +388,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         }
 
         // Build sample map from instrument samples
-        // Format: { "C3": "http://localhost:8000/public/instruments/piano/C3.wav", ... }
+        // Format: { "C3": "http://localhost:8246/public/instruments/piano/C3.wav", ... }
         const sampleMap: Record<string, string> = {};
         instrument.samples.forEach((sample) => {
           // midi_event is already the note name (e.g., "C3", "A4")
