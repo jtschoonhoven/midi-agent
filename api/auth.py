@@ -133,6 +133,9 @@ def get_current_user_id(request: Request) -> UUID:
     user_id = request.scope.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
+
+    if isinstance(user_id, UUID):
+        return user_id
     return UUID(user_id)
 
 

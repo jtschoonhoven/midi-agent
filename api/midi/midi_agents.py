@@ -32,8 +32,7 @@ from api.midi.midi_types import MidiEventType
 from api.songs.song_constants import KEYS, TIME_SIGNATURES
 from api.songs.song_types import Key, TimeSignature
 
-# DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
-DEFAULT_MODEL_NAME: ModelName = "claude-opus-4-5"
+DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
 MAX_ATTEMPTS = 3
 
 log = logging.getLogger(__name__)
@@ -150,6 +149,13 @@ async def generate_midi_for_loop(
     )
 
 
+def _redact_api_key(inputs: dict) -> dict:
+    """Redact api_key from weave op inputs to avoid logging secrets."""
+    if "api_key" in inputs:
+        return {**inputs, "api_key": "REDACTED"}
+    return inputs
+
+
 class _GenerateMidi(weave.Model):
     """Weave model for generating MIDI events from user prompts.
 
@@ -161,7 +167,7 @@ class _GenerateMidi(weave.Model):
     model_name: ModelName
     system_prompt: str
 
-    @weave.op(kind="agent")
+    @weave.op(kind="agent", postprocess_inputs=_redact_api_key)
     async def invoke(
         self,
         *,
@@ -365,7 +371,7 @@ def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None,
         return history
 
 
-@weave.op()
+@weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_openai(
     model_name: "ModelName", chat_history: ChatHistory, api_key: str
 ) -> "GenerateMidiResponse":
@@ -377,7 +383,7 @@ async def _generate_midi_openai(
     return response.output_parsed
 
 
-@weave.op()
+@weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_anthropic(
     model_name: "ModelName", chat_history: ChatHistory, api_key: str
 ) -> "GenerateMidiResponse":
