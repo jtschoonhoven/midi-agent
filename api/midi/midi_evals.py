@@ -1,7 +1,7 @@
 import logging
 import random
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, TypedDict, Union
+from typing import TYPE_CHECKING, Optional, TypedDict
 
 import weave
 
@@ -103,7 +103,7 @@ class EvalResult(TypedDict):
     error: str | None
 
 
-@weave.op
+@weave.op(kind="scorer")  # type: ignore [call-overload]
 def evaluate_midi_events(
     expect_measures: int,
     expect_time_signature: TimeSignature,

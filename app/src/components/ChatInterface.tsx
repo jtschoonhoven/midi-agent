@@ -237,6 +237,13 @@ export default function ChatInterface() {
     loadSongDetail();
   }, [selectedSongId]);
 
+  // Show create song modal when no song is selected
+  useEffect(() => {
+    if (!isLoadingSongs && !selectedSongId && !songDetail) {
+      setShowNewSongModal(true);
+    }
+  }, [isLoadingSongs, selectedSongId, songDetail]);
+
   // Load song data into playback context when song details change
   useEffect(() => {
     if (songDetail && songDetail.tracks) {
@@ -562,39 +569,53 @@ export default function ChatInterface() {
       try {
         setIsCreatingLoop(true);
 
-        const chatResult = await appendLoopChat({
-          loop_id: selectedLoop.id,
-          msg: loopPrompt,
-          measures: selectedLoop.measures,
-        });
+        const loopId = selectedLoop.id;
+        const prompt = loopPrompt;
+        const measures = selectedLoop.measures;
 
-        if (!chatResult.data) {
-          console.error("Failed to append chat:", chatResult.error);
-          alert("Failed to process prompt. Please try again.");
-          return;
-        }
-
-        // Reload full loop details with updated chat history
-        const loopResult = await getLoop(selectedLoop.id);
-        if (loopResult.data) {
-          setSelectedLoop(loopResult.data);
-          setChatHistory(loopResult.data.chats || []);
-        }
-
-        // Update the local song detail
-        if (songDetail && selectedSongId) {
-          const result = await getSong(selectedSongId);
-          if (result.data) {
-            setSongDetail(result.data);
-          }
-        }
-
-        // Clear prompt but keep modal open
+        // Close modal immediately
+        setShowLoopModal(false);
         setLoopPrompt("");
+        setIsCreatingLoop(false);
+
+        // Mark loop as generating and start chat in background
+        setGeneratingLoops((prev) => new Set(prev).add(loopId));
+
+        // Start background generation (don't await)
+        (async () => {
+          try {
+            const chatResult = await appendLoopChat({
+              loop_id: loopId,
+              msg: prompt,
+              measures: measures,
+            });
+
+            if (!chatResult.data) {
+              console.error("Failed to append chat:", chatResult.error);
+              setGeneratingLoops((prev) => {
+                const next = new Set(prev);
+                next.delete(loopId);
+                return next;
+              });
+              alert("Failed to process prompt. Please try again.");
+              return;
+            }
+
+            // Start polling for updates
+            await pollLoopUpdates(loopId);
+          } catch (error) {
+            console.error("Failed to append chat:", error);
+            setGeneratingLoops((prev) => {
+              const next = new Set(prev);
+              next.delete(loopId);
+              return next;
+            });
+            alert("Failed to process prompt. Please try again.");
+          }
+        })();
       } catch (error) {
         console.error("Failed to append chat:", error);
         alert("Failed to process prompt. Please try again.");
-      } finally {
         setIsCreatingLoop(false);
       }
     }
@@ -660,7 +681,7 @@ export default function ChatInterface() {
   // Handle track creation
   const handleCreateTrack = async () => {
     if (!selectedSongId) {
-      alert("No song selected");
+      setShowNewSongModal(true);
       return;
     }
 
@@ -1181,13 +1202,7 @@ export default function ChatInterface() {
         <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
           <CircularProgress />
         </Box>
-      ) : !songDetail ? (
-        <Box sx={{ textAlign: "center", py: 8 }}>
-          <Typography variant="h6" color="text.secondary">
-            No song selected
-          </Typography>
-        </Box>
-      ) : (
+      ) : !songDetail ? null : (
         <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
           {/* Left fixed column: Track labels with full-height background */}
           <Box

@@ -518,26 +518,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, [scanMidiDevices]);
 
-  // Check if MIDI access was previously granted on mount
-  useEffect(() => {
-    if (navigator.requestMIDIAccess) {
-      navigator
-        .requestMIDIAccess()
-        .then((midiAccess) => {
-          midiAccessRef.current = midiAccess;
-          setHasMidiAccess(true);
-          scanMidiDevices(midiAccess);
-
-          midiAccess.onstatechange = () => {
-            scanMidiDevices(midiAccess);
-          };
-        })
-        .catch(() => {
-          console.log("MIDI access not yet granted");
-        });
-    }
-  }, [scanMidiDevices]);
-
   // Fetch all instruments and samples on mount
   useEffect(() => {
     const fetchInstruments = async () => {

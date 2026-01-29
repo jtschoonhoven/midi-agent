@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
@@ -27,11 +27,13 @@ class MidiTrack(Base):
     __tablename__ = "midi_tracks"
     __table_args__ = (CheckConstraint("midi_channel > 0", name="midi_channel_positive"),)
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    song_id: Mapped[str] = mapped_column(String(36), ForeignKey("midi_songs.id"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    song_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_songs.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     midi_channel: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    instrument: Mapped[InstrumentType] = mapped_column(Enum(*INSTRUMENT_TYPES), default=DEFAULT_INST, nullable=False)
+    instrument: Mapped[InstrumentType] = mapped_column(
+        Enum(*INSTRUMENT_TYPES, name="track_instrument"), default=DEFAULT_INST, nullable=False
+    )
     color: Mapped[TrackColor] = mapped_column(String(50), default=DEFAULT_TRACK_COLOR, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -49,8 +51,8 @@ class MidiTrack(Base):
 
     def to_response(self) -> "track_schemas.TrackResponse":
         return track_schemas.TrackResponse(
-            id=self.id,
-            song_id=self.song_id,
+            id=str(self.id),
+            song_id=str(self.song_id),
             title=self.title,
             midi_channel=self.midi_channel,
             instrument=self.instrument,
@@ -61,8 +63,8 @@ class MidiTrack(Base):
 
     def to_detail_response(self) -> "track_schemas.TrackDetailResponse":
         return track_schemas.TrackDetailResponse(
-            id=self.id,
-            song_id=self.song_id,
+            id=str(self.id),
+            song_id=str(self.song_id),
             title=self.title,
             midi_channel=self.midi_channel,
             instrument=self.instrument,

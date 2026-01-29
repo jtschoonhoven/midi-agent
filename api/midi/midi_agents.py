@@ -6,7 +6,7 @@ Docs: https://docs.wandb.ai/weave/guides/core-types/models
 import logging
 import os
 from typing import TypedDict, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pydantic
 import weave
@@ -19,11 +19,11 @@ from weave.flow.scorer import ApplyScorerResult
 from weave.trace.call import Call
 from weave.trace.vals import WeaveList
 
+from api import database
 from api.audio.audio_types import Chord
 from api.chats import chat_models
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
-from api.database import SessionLocal
 from api.instruments.instrument_constants import INSTRUMENT_TYPES
 from api.instruments.instrument_types import InstrumentType
 from api.loops import loop_models, loop_utils
@@ -92,14 +92,13 @@ async def generate_midi_for_loop(
     expect_key: Key,
     expect_measures: int,
     expect_instrument: InstrumentType,
+    api_key: str,
 ) -> "loop_models.MidiLoop":
     model_provider, _ = MODEL_PROVIDER_MAP[model_name]
 
-    # Check for required API keys
-    if model_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-        raise ValueError("OPENAI_API_KEY environment variable is required for OpenAI models")
-    if model_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
-        raise ValueError("ANTHROPIC_API_KEY environment variable is required for Anthropic models")
+    # Validate that an API key was provided
+    if not api_key:
+        raise ValueError("API key is required for MIDI generation")
 
     # Get the chat history and add the current prompt
     chat_history = load_chat_history(user_id=user_id, loop_id=loop_id, system_prompt=SYSTEM_PROMPT)
@@ -117,6 +116,7 @@ async def generate_midi_for_loop(
                 expect_key=expect_key,
                 expect_measures=expect_measures,
                 expect_instrument=expect_instrument,
+                api_key=api_key,
             )
             result, call = response
             score_result: ApplyScorerResult = await call.apply_scorer(
@@ -161,7 +161,7 @@ class _GenerateMidi(weave.Model):
     model_name: ModelName
     system_prompt: str
 
-    @weave.op()
+    @weave.op(kind="agent")
     async def invoke(
         self,
         *,
@@ -171,6 +171,7 @@ class _GenerateMidi(weave.Model):
         expect_key: Key,
         expect_measures: int,
         expect_instrument: InstrumentType,
+        api_key: str,
     ) -> "GenerateMidiResponse":
         """
         Run inference to generate MIDI events using the given model and chat history.
@@ -193,10 +194,10 @@ class _GenerateMidi(weave.Model):
         provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
         if provider == "openai":
-            return await _generate_midi_openai(self.model_name, chat_history)
+            return await _generate_midi_openai(self.model_name, chat_history, api_key)
 
         elif provider == "anthropic":
-            return await _generate_midi_anthropic(self.model_name, chat_history)
+            return await _generate_midi_anthropic(self.model_name, chat_history, api_key)
 
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
@@ -211,7 +212,7 @@ def update_loop(
     midi_events: list[midi_models.MidiEvent],
 ) -> "loop_models.MidiLoop":
     """Save generated MIDI to database as a new loop with chat messages."""
-    with SessionLocal() as db:
+    with database.get_db() as db:
         loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
         if not loop:
@@ -224,7 +225,6 @@ def update_loop(
 
         # Add the user prompt to the chat history
         message = chat_models.ChatMessage(
-            id=str(uuid4()),
             role="user",
             msg=user_prompt,
             midi_events=None,
@@ -234,7 +234,6 @@ def update_loop(
 
         # Add the assistant message to the chat history
         assistant_message = chat_models.ChatMessage(
-            id=str(uuid4()),
             role="assistant",
             msg=agent_description,  # Use LLM-generated description
             midi_events=[event.model_dump() for event in midi_events],
@@ -346,7 +345,7 @@ def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None,
     if not user_id or not loop_id:
         return history
 
-    with SessionLocal() as db:
+    with database.get_db() as db:
         loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
         if not loop:
             raise HTTPException(status_code=404)
@@ -367,8 +366,10 @@ def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None,
 
 
 @weave.op()
-async def _generate_midi_openai(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
-    client = AsyncOpenAI()
+async def _generate_midi_openai(
+    model_name: "ModelName", chat_history: ChatHistory, api_key: str
+) -> "GenerateMidiResponse":
+    client = AsyncOpenAI(api_key=api_key)
     messages = cast(list[ResponseInputItemParam], chat_history)
     response = await client.responses.parse(model=model_name, input=messages, text_format=GenerateMidiResponse)
     if not isinstance(response.output_parsed, GenerateMidiResponse):
@@ -377,8 +378,10 @@ async def _generate_midi_openai(model_name: "ModelName", chat_history: ChatHisto
 
 
 @weave.op()
-async def _generate_midi_anthropic(model_name: "ModelName", chat_history: ChatHistory) -> "GenerateMidiResponse":
-    client = AsyncAnthropic()
+async def _generate_midi_anthropic(
+    model_name: "ModelName", chat_history: ChatHistory, api_key: str
+) -> "GenerateMidiResponse":
+    client = AsyncAnthropic(api_key=api_key)
     system_prompt = ""
     messages: list[BetaMessageParam] = []
 

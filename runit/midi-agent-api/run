@@ -1,0 +1,33 @@
+#!/bin/sh
+# Runit service script for MIDI Agent API
+# This script starts the FastAPI backend
+
+set -e
+
+# Service configuration
+SERVICE_NAME="midi-agent-api"
+APP_DIR="/opt/midi-agent"
+USER="midi-agent"
+
+# Change to app directory
+cd "${APP_DIR}"
+
+# Load environment variables
+if [ -f "${APP_DIR}/.env" ]; then
+    export $(grep -v '^#' "${APP_DIR}/.env" | xargs)
+fi
+
+# Run database migrations before starting the API
+echo "Running database migrations..."
+chpst -u "${USER}" uv run alembic upgrade head
+
+# Execute the API server using uvicorn
+# Note: We use exec to replace the shell process with uvicorn
+# This ensures proper signal handling for graceful shutdowns
+exec chpst -u "${USER}" \
+    uv run uvicorn api.main:app \
+    --host 127.0.0.1 \
+    --port 8246 \
+    --log-level info \
+    --no-access-log \
+    2>&1

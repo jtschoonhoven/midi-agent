@@ -1,9 +1,9 @@
 """SQLAlchemy models for instruments."""
 
 from datetime import datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
@@ -19,11 +19,12 @@ class Instrument(Base):
 
     __tablename__ = "instruments"
 
-    # TODO: When migrating to postgres, use the native UUID type instead of a string
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     title: Mapped[str] = mapped_column(Text, nullable=False)
-    type: Mapped[InstrumentType] = mapped_column(Enum(*INSTRUMENT_TYPES), nullable=False)
-    license_type: Mapped[LicenseType] = mapped_column(Enum(*LICENSE_TYPES), nullable=False)
+    type: Mapped[InstrumentType] = mapped_column(Enum(*INSTRUMENT_TYPES, name="instrument_type"), nullable=False)
+    license_type: Mapped[LicenseType] = mapped_column(
+        Enum(*LICENSE_TYPES, name="instrument_license_type"), nullable=False
+    )
     license_uri: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -40,7 +41,7 @@ class Instrument(Base):
 
     def to_response(self) -> "instrument_schemas.InstrumentResponse":
         return instrument_schemas.InstrumentResponse(
-            id=self.id,
+            id=str(self.id),
             title=self.title,
             type=self.type,
             license_type=self.license_type,
@@ -54,11 +55,14 @@ class InstrumentSample(Base):
 
     __tablename__ = "instrument_samples"
 
-    # TODO: When migrating to postgres, use the native UUID type instead of a string
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    instrument_id: Mapped[str] = mapped_column(String(36), ForeignKey("instruments.id"), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    instrument_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("instruments.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, index=True
+    )
     uri: Mapped[str] = mapped_column(Text, nullable=False)
-    midi_event: Mapped[MidiEventType] = mapped_column(Enum(*MIDI_EVENT_TYPES), nullable=False)
+    midi_event: Mapped[MidiEventType] = mapped_column(
+        Enum(*MIDI_EVENT_TYPES, name="instrument_sample_midi_event"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -72,7 +76,7 @@ class InstrumentSample(Base):
 
     def to_response(self) -> "instrument_schemas.InstrumentSampleResponse":
         return instrument_schemas.InstrumentSampleResponse(
-            id=self.id,
+            id=str(self.id),
             uri=self.uri,
             midi_event=self.midi_event,
         )

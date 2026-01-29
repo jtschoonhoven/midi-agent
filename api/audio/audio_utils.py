@@ -1,39 +1,11 @@
-"""MIDI to audio rendering using FluidSynth."""
+"""MIDI file creation and manipulation utilities."""
 
-import os
 import re
-import tempfile
-import wave
-from pathlib import Path
 
-import fluidsynth
 import mido
 from mido import Message, MidiFile, MidiTrack
 
 from api.audio.audio_types import MidiEvent
-
-
-def get_soundfont_path() -> str:
-    """Get the path to the soundfont file."""
-    # Check for SOUNDFONT_DIR environment variable
-    soundfont_dir = os.getenv("SOUNDFONT_DIR")
-
-    if soundfont_dir:
-        # Use custom soundfont directory
-        soundfont_path = Path(soundfont_dir) / "FluidR3_GM.sf2"
-    else:
-        # Use default location at api/soundfonts
-        project_root = Path(__file__).parent.parent.parent
-        soundfont_path = project_root / "api" / "soundfonts" / "FluidR3_GM.sf2"
-
-    if not soundfont_path.exists():
-        raise FileNotFoundError(
-            f"Soundfont not found at {soundfont_path}. "
-            f"Please ensure FluidR3_GM.sf2 exists in the soundfont directory. "
-            f"You can set a custom directory with the SOUNDFONT_DIR environment variable."
-        )
-
-    return str(soundfont_path)
 
 
 def note_name_to_midi_number(note_name: str) -> int | None:
@@ -132,79 +104,3 @@ def create_midi_file(midi_events: list[MidiEvent], bpm: int, time_signature: str
                 track.append(Message("control_change", control=121, value=0, time=delta))
 
     return mid
-
-
-def render_midi_to_audio(midi_events: list[MidiEvent], bpm: int, sample_rate: int = 44100) -> tuple[str, float, int]:
-    """
-    Render MIDI events to audio using FluidSynth.
-
-    Args:
-        midi_events: List of MIDI events to render
-        bpm: Tempo in BPM
-        sample_rate: Audio sample rate in Hz
-
-    Returns:
-        Tuple of (audio_file_path, duration_seconds, sample_rate)
-    """
-    # Get soundfont
-    soundfont_path = get_soundfont_path()
-
-    # Create MIDI file
-    mid = create_midi_file(midi_events, bpm)
-
-    # Save MIDI file to temporary location
-    with tempfile.NamedTemporaryFile(mode="wb", suffix=".mid", delete=False) as midi_file:
-        midi_file_path = midi_file.name
-        mid.save(midi_file)
-
-    try:
-        # Create output audio file
-        output_file = tempfile.NamedTemporaryFile(mode="wb", suffix=".wav", delete=False)
-        output_file_path = output_file.name
-        output_file.close()
-
-        # Initialize FluidSynth
-        fs = fluidsynth.Synth(samplerate=float(sample_rate))
-        fs.start()
-
-        # Load soundfont
-        sfid = fs.sfload(soundfont_path)
-        fs.program_select(0, sfid, 0, 0)
-
-        # Play MIDI file and render to audio
-        fs.play_midi_file(midi_file_path)
-
-        # Get audio samples
-        samples = []
-        # Calculate approximate duration from MIDI file
-        duration = mid.length
-
-        # Render audio in chunks
-        num_samples = int(duration * sample_rate) + sample_rate  # Add 1 second buffer
-        chunk_size = sample_rate // 2  # 0.5 second chunks
-
-        for _ in range(0, num_samples, chunk_size):
-            chunk = fs.get_samples(chunk_size)
-            samples.extend(chunk)
-
-        # Convert to 16-bit PCM
-        import numpy as np
-
-        audio_data = np.array(samples, dtype=np.float32)
-        audio_data = np.clip(audio_data * 32767, -32768, 32767).astype(np.int16)
-
-        # Write WAV file
-        with wave.open(output_file_path, "wb") as wav_file:
-            wav_file.setnchannels(2)  # Stereo
-            wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(audio_data.tobytes())
-
-        # Clean up FluidSynth
-        fs.delete()
-
-        return output_file_path, duration, sample_rate
-
-    finally:
-        # Clean up MIDI file
-        os.unlink(midi_file_path)

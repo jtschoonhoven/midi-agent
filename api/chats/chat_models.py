@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
@@ -20,14 +20,14 @@ class ChatMessage(Base):
 
     __tablename__ = "chat_messages"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     role: Mapped[str] = mapped_column(
-        Enum("user", "assistant", name="message_role"),
+        Enum("user", "assistant", name="chat_message_role"),
         nullable=False,
     )
     msg: Mapped[str] = mapped_column(Text, nullable=False)
     midi_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
-    loop_id: Mapped[str] = mapped_column(String(36), ForeignKey("midi_loops.id"), nullable=False, index=True)
+    loop_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_loops.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -41,11 +41,11 @@ class ChatMessage(Base):
 
     def to_response(self) -> "ChatMessageResponse":
         return loop_schemas.ChatMessageResponse(
-            id=self.id,
+            id=str(self.id),
             role=self.role,
             msg=self.msg,
             midi_events=self.midi_events,
-            loop_id=self.loop_id,
+            loop_id=str(self.loop_id),
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
         )
@@ -58,8 +58,8 @@ class ConversationMessage(Base):
     __tablename__ = "conversation_messages"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    thread_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
+    thread_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" or "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -96,8 +96,8 @@ def store_user_message(
 ) -> ConversationMessage:
     """[DEPRECATED] Store a user message in the database. Use new models instead."""
     message = ConversationMessage(
-        user_id=str(user_id),
-        thread_id=str(thread_id),
+        user_id=user_id,
+        thread_id=thread_id,
         role="user",
         content=prompt,
         plan_model=plan_model,
@@ -123,8 +123,8 @@ def store_assistant_message(
 ) -> ConversationMessage:
     """[DEPRECATED] Store an assistant response in the database. Use new models instead."""
     message = ConversationMessage(
-        user_id=str(user_id),
-        thread_id=str(thread_id),
+        user_id=user_id,
+        thread_id=thread_id,
         role="assistant",
         content=content,
         plan_data=plan_data,
@@ -141,8 +141,8 @@ def get_conversation_history(db: Any, user_id: UUID, thread_id: UUID) -> list[Co
     messages: list[ConversationMessage] = (
         db.query(ConversationMessage)
         .filter(
-            ConversationMessage.user_id == str(user_id),
-            ConversationMessage.thread_id == str(thread_id),
+            ConversationMessage.user_id == user_id,
+            ConversationMessage.thread_id == thread_id,
         )
         .order_by(ConversationMessage.created_at.asc())
         .all()

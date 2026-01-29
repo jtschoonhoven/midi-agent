@@ -1,0 +1,19 @@
+#!/bin/sh
+# Runit logging script for MIDI Agent API
+# This script captures logs and writes them to disk with automatic rotation
+
+set -e
+
+# Logging configuration
+LOG_DIR="/var/log/midi-agent-api"
+SERVICE_USER="midi-agent"
+
+# Create log directory if it doesn't exist
+mkdir -p "${LOG_DIR}"
+chown "${SERVICE_USER}:${SERVICE_USER}" "${LOG_DIR}"
+
+# Use svlogd for log rotation and management
+# - s1000000: rotate logs when they reach ~1MB
+# - n10: keep 10 old log files
+# - t: add timestamps to each line
+exec chpst -u "${SERVICE_USER}" svlogd -tt "${LOG_DIR}"

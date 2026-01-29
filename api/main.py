@@ -2,7 +2,6 @@
 
 import logging
 import os
-import shutil
 import traceback
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -16,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from api import auth
 from api.database import init_db
 from api.instruments import instrument_routes, instrument_utils
 from api.loops import loop_routes
@@ -52,12 +52,23 @@ app.add_middleware(
 )
 
 
+# Authentication middleware - validates API keys for all requests
+@app.middleware("http")
+async def auth_middleware_wrapper(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """Wrap the auth middleware."""
+    return await auth.auth_middleware(request, call_next)
+
+
 # Request/Response logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """Log all incoming requests and responses."""
     log.info(f"Request: {request.method} {request.url.path}")
-    log.debug(f"Request headers: {dict(request.headers)}")
+    # Log headers but mask the Authorization header for security
+    headers = dict(request.headers)
+    if "authorization" in headers:
+        headers["authorization"] = "***MASKED***"
+    log.debug(f"Request headers: {headers}")
 
     try:
         response = await call_next(request)
@@ -120,18 +131,6 @@ def startup_event() -> None:
     load_dotenv()
     weave.init(os.environ["PROJECT_ID"])
 
-    # Check if FluidSynth is installed
-    fluidsynth_path = shutil.which("fluidsynth")
-    if not fluidsynth_path:
-        error_msg = (
-            "FluidSynth is not installed or not in PATH. "
-            "Please install FluidSynth:\n"
-            "  - macOS: brew install fluid-synth\n"
-            "  - Ubuntu/Debian: apt-get install fluidsynth\n"
-            "  - Windows: Download from https://github.com/FluidSynth/fluidsynth/releases"
-        )
-        raise RuntimeError(error_msg)
-
     init_db()
     instrument_utils.init_db()
     # Create audio output directory if it doesn't exist
@@ -156,6 +155,12 @@ app.mount("/public", StaticFiles(directory="api/public", html=False), name="publ
 async def health_check() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Serve React frontend (must be last - catch-all route)
+frontend_dir = Path(__file__).parent.parent / "app" / "dist"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
 
 if __name__ == "__main__":

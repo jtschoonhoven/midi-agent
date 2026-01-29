@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
@@ -14,6 +14,7 @@ from api.songs.song_types import Key, TimeSignature
 
 if TYPE_CHECKING:
     from api.tracks.track_models import MidiTrack
+    from api.users.user_models import User
 
 
 class MidiSong(Base):
@@ -21,19 +22,21 @@ class MidiSong(Base):
 
     __tablename__ = "midi_songs"
 
-    # TODO: When migrating to postgres, use the native UUID type instead of a string
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     bpm: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
-    key: Mapped[Key] = mapped_column(Enum(*KEYS), nullable=False)
-    time_signature: Mapped[TimeSignature] = mapped_column(Enum(*TIME_SIGNATURES), default="4/4", nullable=False)
+    key: Mapped[Key] = mapped_column(Enum(*KEYS, name="song_key"), nullable=False)
+    time_signature: Mapped[TimeSignature] = mapped_column(
+        Enum(*TIME_SIGNATURES, name="song_time_signature"), default="4/4", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="songs")
     tracks: Mapped[list["MidiTrack"]] = relationship("MidiTrack", back_populates="song", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -41,7 +44,7 @@ class MidiSong(Base):
 
     def to_response(self) -> "song_schemas.SongResponse":
         return song_schemas.SongResponse(
-            id=self.id,
+            id=str(self.id),
             title=self.title,
             bpm=self.bpm,
             key=self.key,
@@ -52,7 +55,7 @@ class MidiSong(Base):
 
     def to_detail_response(self) -> "song_schemas.SongDetailResponse":
         return song_schemas.SongDetailResponse(
-            id=self.id,
+            id=str(self.id),
             title=self.title,
             bpm=self.bpm,
             key=self.key,

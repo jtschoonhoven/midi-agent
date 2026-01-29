@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.database import Base
@@ -21,12 +21,12 @@ class MidiLoop(Base):
 
     __tablename__ = "midi_loops"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # In measures
     measures: Mapped[int] = mapped_column(Integer, nullable=False)
     extend_measures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     midi_events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
-    track_id: Mapped[str] = mapped_column(String(36), ForeignKey("midi_tracks.id"), nullable=False, index=True)
+    track_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_tracks.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -43,24 +43,24 @@ class MidiLoop(Base):
 
     def to_response(self) -> "LoopResponse":
         return loop_schemas.LoopResponse(
-            id=self.id,
+            id=str(self.id),
             offset=self.offset,
             measures=self.measures,
             extend_measures=self.extend_measures,
             midi_events=self.midi_events,
-            track_id=self.track_id,
+            track_id=str(self.track_id),
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
         )
 
     def to_detail_response(self) -> "LoopDetailResponse":
         return loop_schemas.LoopDetailResponse(
-            id=self.id,
+            id=str(self.id),
             offset=self.offset,
             measures=self.measures,
             extend_measures=self.extend_measures,
             midi_events=self.midi_events,
-            track_id=self.track_id,
+            track_id=str(self.track_id),
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
             chats=[chat.to_response() for chat in self.chat_messages],

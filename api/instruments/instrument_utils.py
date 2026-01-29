@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from api.database import SessionLocal
+from api import database
 from api.instruments import instrument_models
 from api.instruments.instrument_constants import INSTRUMENT_DIR_TO_METADATA
 from api.midi import midi_utils
@@ -20,7 +20,7 @@ def init_db() -> None:
     log.info(f"Initializing instruments from {public_dir / 'instruments'}")
 
     # Delete and rebuild the instruments table
-    with SessionLocal() as db:
+    with database.get_db() as db:
         db.query(instrument_models.Instrument).delete()
 
         for inst, metadata in INSTRUMENT_DIR_TO_METADATA.items():
