@@ -36,10 +36,9 @@ async def create_loop(
             midi_events=[],
             track_id=request.track_id,
         )
-        with database.get_db() as db:
-            db.add(new_loop)
-            db.commit()
-            db.refresh(new_loop)
+        db.add(new_loop)
+        db.commit()
+        db.refresh(new_loop)
 
         return new_loop.to_detail_response()
 
