@@ -76,6 +76,12 @@ async def auth_middleware(request: Request, call_next: Callable[[Request], Await
         request.scope["anthropic_api_key"] = ""
         return await call_next(request)
 
+    # Skip auth check for non-API paths (frontend static files, health checks, etc.)
+    if not request.url.path.startswith("/api/"):
+        request.scope["user_id"] = UUID("00000000-0000-0000-0000-000000000000")
+        request.scope["anthropic_api_key"] = ""
+        return await call_next(request)
+
     authorization = request.headers.get("authorization")
 
     if not authorization:

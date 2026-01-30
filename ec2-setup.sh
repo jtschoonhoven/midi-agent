@@ -61,10 +61,6 @@ if [ ! -f "${APP_DIR}/.env" ]; then
     echo "⚠️  IMPORTANT: Edit ${APP_DIR}/.env and add API keys!"
 fi
 
-# Run database migrations
-echo "Running database migrations..."
-sudo -u ${APP_USER} bash -c "cd ${APP_DIR} && uv run alembic upgrade head"
-
 # Create audio output directory
 mkdir -p ${APP_DIR}/audio_output
 chown ${APP_USER}:${APP_USER} ${APP_DIR}/audio_output
@@ -81,8 +77,8 @@ Type=simple
 User=midiagent
 WorkingDirectory=/home/midi-agent
 EnvironmentFile=/home/midi-agent/.env
-ExecStartPre=/usr/local/bin/uv run alembic upgrade head
-ExecStart=/usr/local/bin/uv run uvicorn api.main:app --host 127.0.0.1 --port 8246 --log-level info --no-access-log
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStart=/usr/local/bin/uv run uvicorn api.main:app --host 0.0.0.0 --port 80 --log-level info --no-access-log
 Restart=always
 RestartSec=5
 
@@ -101,6 +97,7 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "1. Edit ${APP_DIR}/.env with your API keys"
-echo "2. Restart service: sudo systemctl restart api"
-echo "3. Check logs: sudo journalctl -u api -f"
-echo "4. Access app: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
+echo "2. Run migrations: cd ${APP_DIR} && sudo -u ${APP_USER} uv run alembic upgrade head"
+echo "3. Restart service: sudo systemctl restart api"
+echo "4. Check logs: sudo journalctl -u api -f"
+echo "5. Access app: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
