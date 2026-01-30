@@ -11,7 +11,6 @@ import { getStoredApiKey } from "./auth";
 
 // Create the API client with automatic type inference
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8246";
-console.log("API_BASE_URL", API_BASE_URL);
 
 export const apiClient = createClient<paths>({
   baseUrl: API_BASE_URL,
