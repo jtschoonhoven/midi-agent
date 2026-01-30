@@ -14,113 +14,93 @@ echo "Started: $(date)"
 echo "=========================================="
 
 # Configuration
-APP_DIR="/opt/midi-agent"
-APP_USER="midi-agent"
-DB_DIR="/mnt/ebs/midi-agent"
+APP_DIR="/home/midi-agent"
+APP_USER="midiagent"
 REPO_URL="https://github.com/jtschoonhoven/midi-agent.git"
 
 # Update system packages
-echo "[1/11] Updating system..."
+echo "Updating system..."
 apt-get update
 apt-get upgrade -y
 
-# Install system dependencies
-echo "[2/11] Installing dependencies..."
-apt-get install -y \
-    git \
-    python3.11 \
-    python3.11-venv \
-    fluidsynth \
-    runit \
-    curl
-
 # Install Node.js 20.x
-echo "[3/11] Installing Node.js..."
+echo "Installing Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
+apt-get install -y nodejs git
 
 # Install uv package manager
-echo "[4/11] Installing uv..."
+echo "Installing uv..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="/root/.local/bin:$PATH"
+cp /root/.local/bin/uv /usr/local/bin/uv
+cp /root/.local/bin/uvx /usr/local/bin/uvx
+chmod +x /usr/local/bin/uv /usr/local/bin/uvx
 
-# Create application user
-echo "[5/11] Creating application user..."
-useradd -r -s /bin/bash -d ${APP_DIR} -m ${APP_USER}
+# Create application user (without home dir - we'll clone into it)
+echo "Creating application user..."
+useradd -r -s /bin/bash -d ${APP_DIR} ${APP_USER}
 
-# Mount EBS volume
-echo "[6/11] Setting up EBS volume..."
-# Wait for volume (assumes /dev/nvme1n1 - adjust if needed)
-for i in {1..30}; do
-    [ -e /dev/nvme1n1 ] && break
-    sleep 2
-done
-
-# Format if first boot
-if ! blkid /dev/nvme1n1; then
-    mkfs.ext4 /dev/nvme1n1
-fi
-
-# Mount
-mkdir -p /mnt/ebs
-mount /dev/nvme1n1 /mnt/ebs
-
-# Add to fstab for auto-mount on reboot
-UUID=$(blkid -s UUID -o value /dev/nvme1n1)
-echo "UUID=${UUID} /mnt/ebs ext4 defaults,nofail 0 2" >> /etc/fstab
-
-# Create database directory
-mkdir -p ${DB_DIR}
-chown ${APP_USER}:${APP_USER} ${DB_DIR}
-
-# Clone repository
-echo "[7/11] Cloning repository..."
-sudo -u ${APP_USER} git clone ${REPO_URL} ${APP_DIR}
+# Clone repository as the app directory
+echo "Cloning repository..."
+git clone ${REPO_URL} ${APP_DIR}
+chown -R ${APP_USER}:${APP_USER} ${APP_DIR}
 cd ${APP_DIR}
 
 # Install Python dependencies
-echo "[8/11] Installing Python dependencies..."
-sudo -u ${APP_USER} bash -c "export PATH=/root/.local/bin:\$PATH && cd ${APP_DIR} && uv sync"
+echo "Installing Python dependencies..."
+sudo -u ${APP_USER} bash -c "cd ${APP_DIR} && uv sync"
 
 # Build frontend
-echo "[9/11] Building frontend..."
+echo "Building frontend..."
 sudo -u ${APP_USER} bash -c "cd ${APP_DIR}/app && npm install && npm run build"
 
 # Set up environment
 if [ ! -f "${APP_DIR}/.env" ]; then
     cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
-    echo "DATABASE_URL=sqlite:///${DB_DIR}/midi_agent.db" >> "${APP_DIR}/.env"
     chown ${APP_USER}:${APP_USER} "${APP_DIR}/.env"
     chmod 600 "${APP_DIR}/.env"
     echo "⚠️  IMPORTANT: Edit ${APP_DIR}/.env and add API keys!"
 fi
 
 # Run database migrations
-echo "[10/11] Running database migrations..."
-sudo -u ${APP_USER} bash -c "cd ${APP_DIR} && export PATH=/root/.local/bin:\$PATH && uv run alembic upgrade head"
+echo "Running database migrations..."
+sudo -u ${APP_USER} bash -c "cd ${APP_DIR} && uv run alembic upgrade head"
 
 # Create audio output directory
 mkdir -p ${APP_DIR}/audio_output
 chown ${APP_USER}:${APP_USER} ${APP_DIR}/audio_output
 
-# Set up runit service
-echo "[11/11] Setting up runit service..."
-mkdir -p /etc/service/midi-agent-api/log
-cp ${APP_DIR}/runit/midi-agent-api/run /etc/service/midi-agent-api/run
-cp ${APP_DIR}/runit/midi-agent-api/log/run /etc/service/midi-agent-api/log/run
-chmod +x /etc/service/midi-agent-api/run
-chmod +x /etc/service/midi-agent-api/log/run
+# Set up systemd service
+echo "Setting up systemd service..."
+cat > /etc/systemd/system/api.service << 'EOF'
+[Unit]
+Description=MIDI Agent API
+After=network.target
 
-# Create log directory
-mkdir -p /var/log/midi-agent-api
-chown ${APP_USER}:${APP_USER} /var/log/midi-agent-api
+[Service]
+Type=simple
+User=midiagent
+WorkingDirectory=/home/midi-agent
+EnvironmentFile=/home/midi-agent/.env
+ExecStartPre=/usr/local/bin/uv run alembic upgrade head
+ExecStart=/usr/local/bin/uv run uvicorn api.main:app --host 127.0.0.1 --port 8246 --log-level info --no-access-log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start the service
+systemctl daemon-reload
+systemctl enable api
+systemctl start api
 
 echo "=========================================="
 echo "Provisioning Complete: $(date)"
 echo "=========================================="
 echo ""
 echo "Next steps:"
-echo "1. Edit /opt/midi-agent/.env with your API keys"
-echo "2. Restart service: sudo sv restart midi-agent-api"
-echo "3. Check logs: sudo tail -f /var/log/midi-agent-api/current"
+echo "1. Edit ${APP_DIR}/.env with your API keys"
+echo "2. Restart service: sudo systemctl restart api"
+echo "3. Check logs: sudo journalctl -u api -f"
 echo "4. Access app: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)"
