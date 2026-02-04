@@ -1,6 +1,7 @@
 """FastAPI routes for MIDI loops."""
 
 from uuid import UUID
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -54,6 +55,11 @@ async def get_loop(
     """
     Get a specific loop with all chat messages.
     """
+    # First check if this is a demo loop
+    for inst, demo_loop_id in loop_utils.DEMO_LOOP_IDS.items():
+        if loop_id == str(demo_loop_id):
+            return loop_utils.get_demo_loop_for_instrument(inst, loop_id).to_detail_response()
+
     if not user_id:
         raise HTTPException(status_code=401)
 

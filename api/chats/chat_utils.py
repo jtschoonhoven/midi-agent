@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from uuid import UUID
 
 from api.chats import chat_models
 from api.instruments.instrument_types import InstrumentType
@@ -24,7 +25,7 @@ DEMO_CHAT_CONTENT: dict[InstrumentType, tuple[str, str]] = {
 }
 
 
-def get_demo_chats_for_instrument(instrument: InstrumentType, loop_id: uuid.UUID) -> list["chat_models.ChatMessage"]:
+def get_demo_chats_for_instrument(instrument: InstrumentType, loop_id: UUID) -> list["chat_models.ChatMessage"]:
     """
     Return a demo user and assistant chat message for a given instrument.
     """
@@ -35,19 +36,19 @@ def get_demo_chats_for_instrument(instrument: InstrumentType, loop_id: uuid.UUID
     return [
         chat_models.ChatMessage(
             id=uuid.uuid4(),
+            loop_id=loop_id,
             role="user",
             msg=user_msg,
             midi_events=None,
-            loop_id=loop_id,
             created_at=now,
             updated_at=now,
         ),
         chat_models.ChatMessage(
             id=uuid.uuid4(),
+            loop_id=loop_id,
             role="assistant",
             msg=assistant_msg,
             midi_events=midi_events,
-            loop_id=loop_id,
             created_at=now,
             updated_at=now,
         ),

@@ -28,7 +28,9 @@ class ChatMessage(Base):
     )
     msg: Mapped[str] = mapped_column(Text, nullable=False)
     midi_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
-    loop_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_loops.id", ondelete="CASCADE"), nullable=False, index=True)
+    loop_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("midi_loops.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -58,11 +60,12 @@ class ChatMessage(Base):
         return f"<ChatMessage(id={self.id}, role={self.role}, loop_id={self.loop_id})>"
 
     def to_response(self) -> "ChatMessageResponse":
+        midi_events = [MidiEvent.model_validate(event) for event in self.midi_events] if self.midi_events else None
         return loop_schemas.ChatMessageResponse(
             id=str(self.id),
             role=self.role,
             msg=self.msg,
-            midi_events=[MidiEvent.model_validate(event) for event in self.midi_events],
+            midi_events=midi_events,
             loop_id=str(self.loop_id),
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),
