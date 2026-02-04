@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String, Text, Uuid, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from api.database import Base
 from api.loops import loop_schemas
+from api.midi.midi_models import MidiEvent
 
 if TYPE_CHECKING:
     from api.loops.loop_models import MidiLoop
@@ -33,6 +34,23 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    @validates("midi_events")
+    def validate_midi_events(
+        self, _key: str, value: list[dict[str, Any] | MidiEvent] | None
+    ) -> list[dict[str, Any]] | None:
+        """Validate and serialize midi_events to dicts for JSON storage."""
+        if value is None:
+            return None
+        result: list[dict[str, Any]] = []
+        for event in value:
+            if isinstance(event, MidiEvent):
+                result.append(event.model_dump())
+            else:
+                # Validate dict conforms to MidiEvent schema, then store as dict
+                MidiEvent.model_validate(event)
+                result.append(event)
+        return result
+
     # Relationships
     loop: Mapped["MidiLoop"] = relationship("MidiLoop", back_populates="chat_messages")
 
@@ -44,7 +62,7 @@ class ChatMessage(Base):
             id=str(self.id),
             role=self.role,
             msg=self.msg,
-            midi_events=self.midi_events,
+            midi_events=[MidiEvent.model_validate(event) for event in self.midi_events],
             loop_id=str(self.loop_id),
             created_at=self.created_at.isoformat(),
             updated_at=self.updated_at.isoformat(),

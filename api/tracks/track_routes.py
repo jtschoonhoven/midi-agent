@@ -14,7 +14,8 @@ router = APIRouter(prefix="/api/midi", tags=["tracks"])
 
 @router.post("/tracks/", response_model=track_schemas.TrackDetailResponse)
 async def create_track(
-    request: "track_schemas.CreateTrackRequest", user_id: UUID = Depends(auth.get_current_user_id)
+    request: "track_schemas.CreateTrackRequest",
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> "track_schemas.TrackDetailResponse":
     """
     Create a new MIDI track for a song.
@@ -24,6 +25,9 @@ async def create_track(
 
     The track color is automatically assigned cyclically from the color palette.
     """
+    if user_id is None:
+        raise HTTPException(status_code=401)
+
     try:
         with database.get_db() as db:
             # Validate that the song exists and belongs to the user
@@ -71,12 +75,18 @@ async def create_track(
 
 
 @router.delete("/tracks/{track_id}", status_code=204)
-async def delete_track(track_id: str, user_id: UUID = Depends(auth.get_current_user_id)) -> None:
+async def delete_track(
+    track_id: str,
+    user_id: UUID | None = Depends(auth.get_current_user_id),
+) -> None:
     """
     Delete a track and all associated loops.
 
     The loops are automatically deleted via cascade relationship.
     """
+    if user_id is None:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         track = track_utils.get_track_for_user(db, user_id, track_id)
 
@@ -90,12 +100,17 @@ async def delete_track(track_id: str, user_id: UUID = Depends(auth.get_current_u
 
 @router.patch("/tracks/{track_id}", response_model=track_schemas.TrackResponse)
 async def update_track(
-    track_id: str, request: "track_schemas.PatchTrackRequest", user_id: UUID = Depends(auth.get_current_user_id)
+    track_id: str,
+    request: "track_schemas.PatchTrackRequest",
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> "track_schemas.TrackResponse":
     """
     Update a track's title, MIDI channel, instrument, and/or color.
     All fields are optional - only provided fields will be updated.
     """
+    if user_id is None:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         track = track_utils.get_track_for_user(db, user_id, track_id)
 

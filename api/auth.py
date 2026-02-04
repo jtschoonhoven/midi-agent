@@ -11,6 +11,7 @@ import anthropic
 from fastapi import HTTPException, Request, Response
 
 from api.database import get_db
+from api.songs.song_utils import create_demo_song_for_user
 from api.users import user_models
 
 log = logging.getLogger(__name__)
@@ -72,20 +73,23 @@ async def auth_middleware(request: Request, call_next: Callable[[Request], Await
     """
     # Skip auth check for OPTIONS requests (CORS preflight)
     if request.method == "OPTIONS":
-        request.scope["user_id"] = UUID("00000000-0000-0000-0000-000000000000")
+        request.scope["user_id"] = ""
         request.scope["anthropic_api_key"] = ""
         return await call_next(request)
 
     # Skip auth check for non-API paths (frontend static files, health checks, etc.)
     if not request.url.path.startswith("/api/"):
-        request.scope["user_id"] = UUID("00000000-0000-0000-0000-000000000000")
+        request.scope["user_id"] = ""
         request.scope["anthropic_api_key"] = ""
         return await call_next(request)
 
     authorization = request.headers.get("authorization")
 
+    # If no authorization header, use demo mode (allow unauthenticated access)
     if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header required (Anthropic API key)")
+        request.scope["user_id"] = ""
+        request.scope["anthropic_api_key"] = ""
+        return await call_next(request)
 
     # Extract API key from "Bearer <key>" format or use as-is
     api_key = authorization.removeprefix("Bearer ").strip()
@@ -113,14 +117,18 @@ async def auth_middleware(request: Request, call_next: Callable[[Request], Await
             request.scope["anthropic_api_key"] = api_key
             return await call_next(request)
 
-    # User doesn't exist - validate the API key before creating
-    if not validate_anthropic_api_key(api_key):
-        raise HTTPException(status_code=401, detail="Invalid or non-functional Anthropic API key")
+        # User doesn't exist - validate the API key before creating
+        if not validate_anthropic_api_key(api_key):
+            raise HTTPException(status_code=401, detail="Invalid or non-functional Anthropic API key")
 
-    # Create new user
-    with get_db() as db:
+        # Create new user and add demo song to their account
         user = user_models.User(anthropic_api_key_sha256=anthropic_api_key_sha256)
         db.add(user)
+        db.flush()  # Get user ID before creating demo song
+
+        # Add demo song to new user's account
+        create_demo_song_for_user(db, user.id)
+
         db.commit()
         db.refresh(user)
         # Attach user_id and API key to request scope for downstream access
@@ -129,16 +137,16 @@ async def auth_middleware(request: Request, call_next: Callable[[Request], Await
         return await call_next(request)
 
 
-def get_current_user_id(request: Request) -> UUID:
+def get_current_user_id(request: Request) -> UUID | None:
     """
     Extract user_id from request scope (set by auth_middleware).
 
-    This is a thin wrapper for use with FastAPI's Depends() for backwards compatibility.
-    The middleware ensures the user_id is always set for authenticated requests.
+    Returns None for unauthenticated (demo) users, allowing routes to handle
+    demo mode appropriately (e.g., return demo content or 401/403).
     """
     user_id = request.scope.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=401, detail="User not authenticated")
+        return None
 
     if isinstance(user_id, UUID):
         return user_id

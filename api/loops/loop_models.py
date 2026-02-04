@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, Uuid, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from api.database import Base
 from api.loops import loop_schemas
+from api.midi.midi_models import MidiEvent
 
 if TYPE_CHECKING:
     from api.chats.chat_models import ChatMessage
@@ -31,6 +32,19 @@ class MidiLoop(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    @validates("midi_events")
+    def validate_midi_events(self, _key: str, value: list[dict[str, Any] | MidiEvent]) -> list[dict[str, Any]]:
+        """Validate and serialize midi_events to dicts for JSON storage."""
+        result: list[dict[str, Any]] = []
+        for event in value:
+            if isinstance(event, MidiEvent):
+                result.append(event.model_dump())
+            else:
+                # Validate dict conforms to MidiEvent schema, then store as dict
+                MidiEvent.model_validate(event)
+                result.append(event)
+        return result
 
     # Relationships
     track: Mapped["MidiTrack"] = relationship("MidiTrack", back_populates="loops")  # pyright: ignore[reportUndefinedVariable]

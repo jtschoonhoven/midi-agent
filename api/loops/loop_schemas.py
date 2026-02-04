@@ -3,6 +3,8 @@
 import pydantic
 from pydantic import ConfigDict
 
+from api.midi.midi_models import MidiEvent
+
 
 class ChatMessageResponse(pydantic.BaseModel):
     """Response model for chat messages."""
@@ -10,7 +12,7 @@ class ChatMessageResponse(pydantic.BaseModel):
     id: str = pydantic.Field(description="Chat message ID")
     role: str = pydantic.Field(description="Message role: 'user' or 'assistant'")
     msg: str = pydantic.Field(description="Message content")
-    midi_events: list[dict] | None = pydantic.Field(None, description="MIDI events (if any)")
+    midi_events: list[MidiEvent] | None = pydantic.Field(None, description="MIDI events (if any)")
     loop_id: str = pydantic.Field(description="ID of the associated loop")
     created_at: str = pydantic.Field(description="ISO timestamp of message creation")
     updated_at: str = pydantic.Field(description="ISO timestamp of last update")
@@ -25,7 +27,7 @@ class LoopResponse(pydantic.BaseModel):
     offset: int = pydantic.Field(description="Position offset in measures from start of song")
     measures: int = pydantic.Field(description="Number of measures in the loop")
     extend_measures: int = pydantic.Field(description="Number of extra measures to add (or subtract) from the loop")
-    midi_events: list[dict] = pydantic.Field(description="MIDI events in the loop")
+    midi_events: list[MidiEvent] = pydantic.Field(description="MIDI events in the loop")
     track_id: str = pydantic.Field(description="ID of the parent track")
     created_at: str = pydantic.Field(description="ISO timestamp of creation")
     updated_at: str = pydantic.Field(description="ISO timestamp of last update")

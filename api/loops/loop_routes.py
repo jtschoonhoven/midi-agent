@@ -18,11 +18,14 @@ router = APIRouter(prefix="/api/midi", tags=["loops"])
 @router.post("/loops/", response_model=loop_schemas.LoopDetailResponse)
 async def create_loop(
     request: loop_schemas.CreateLoopRequest,
-    user_id: UUID = Depends(auth.get_current_user_id),
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopDetailResponse:
     """
     Create a new MIDI loop.
     """
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         track = track_utils.get_track_for_user(db, user_id, request.track_id)
 
@@ -44,10 +47,16 @@ async def create_loop(
 
 
 @router.get("/loops/{loop_id}", response_model=loop_schemas.LoopDetailResponse)
-async def get_loop(loop_id: str, user_id: UUID = Depends(auth.get_current_user_id)) -> loop_schemas.LoopDetailResponse:
+async def get_loop(
+    loop_id: str,
+    user_id: UUID | None = Depends(auth.get_current_user_id),
+) -> loop_schemas.LoopDetailResponse:
     """
     Get a specific loop with all chat messages.
     """
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
@@ -60,13 +69,16 @@ async def get_loop(loop_id: str, user_id: UUID = Depends(auth.get_current_user_i
 @router.delete("/loops/{loop_id}", status_code=204)
 async def delete_loop(
     loop_id: str,
-    user_id: UUID = Depends(auth.get_current_user_id),
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> None:
     """
     Delete a loop and all associated chat messages.
 
     The chat messages are automatically deleted via cascade relationship.
     """
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
@@ -80,12 +92,17 @@ async def delete_loop(
 
 @router.patch("/loops/{loop_id}", response_model=loop_schemas.LoopResponse)
 async def update_loop(
-    loop_id: str, request: loop_schemas.PatchLoopRequest, user_id: UUID = Depends(auth.get_current_user_id)
+    loop_id: str,
+    request: loop_schemas.PatchLoopRequest,
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopResponse:
     """
     Update a loop's offset, extend_measures, or track_id.
     All fields are optional - only provided fields will be updated.
     """
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
 
@@ -117,9 +134,12 @@ async def update_loop(
 async def append_chat(
     request: loop_schemas.AppendChatRequest,
     http_request: Request,
-    user_id: UUID = Depends(auth.get_current_user_id),
+    user_id: UUID | None = Depends(auth.get_current_user_id),
 ) -> loop_schemas.LoopDetailResponse:
     """Create a new user chat message for a loop."""
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     with database.get_db() as db:
         loop: loop_models.MidiLoop | None = (
             db.query(loop_models.MidiLoop)
@@ -160,12 +180,18 @@ async def append_chat(
 
 
 @router.get("/loops/{loop_id}/download")
-async def download_loop_wav(loop_id: str, user_id: UUID = Depends(auth.get_current_user_id)) -> StreamingResponse:
+async def download_loop_wav(
+    loop_id: str,
+    user_id: UUID | None = Depends(auth.get_current_user_id),
+) -> StreamingResponse:
     """
     Download a loop as a WAV file.
 
     Renders the loop to audio using the instrument samples and returns it as a downloadable WAV file.
     """
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     # Get loop with track and song information
     with database.get_db() as db:
         loop: loop_models.MidiLoop | None = (

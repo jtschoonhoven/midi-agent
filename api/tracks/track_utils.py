@@ -1,4 +1,6 @@
 import io
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
@@ -9,9 +11,12 @@ from scipy.io import wavfile
 from sqlalchemy.orm import Session
 
 from api.instruments import instrument_models
+from api.instruments.instrument_types import InstrumentType
 from api.loops import loop_models
+from api.loops.loop_utils import get_demo_loop_for_instrument
 from api.songs import song_models
 from api.tracks import track_models
+from api.tracks.track_types import TrackColor
 
 
 def get_track_for_user(db: Session, user_id: str | UUID, track_id: str | UUID) -> Optional["track_models.MidiTrack"]:
@@ -159,3 +164,44 @@ def render_loop_to_wav(
     wav_buffer.seek(0)
 
     return wav_buffer
+
+
+def get_demo_track_for_instrument(instrument: InstrumentType, song_id: UUID) -> track_models.MidiTrack:
+    """
+    Get a demo track ORM instance for a given instrument type.
+    """
+    now = datetime.now()
+
+    title: str = instrument.title()
+    midi_channel: int = 1
+    color: TrackColor = "primary"
+
+    if instrument == "piano":
+        title = "Piano"
+        midi_channel = 1
+        color = "primary"
+    elif instrument == "bass":
+        title = "Bass"
+        midi_channel = 2
+        color = "secondary"
+    elif instrument == "drum":
+        title = "Drums"
+        midi_channel = 10
+        color = "error"
+    else:
+        raise ValueError(f"Unknown instrument type: {instrument}")
+
+    track = track_models.MidiTrack(
+        id=uuid.uuid4(),
+        song_id=song_id,
+        title=title,
+        midi_channel=midi_channel,
+        instrument=instrument,
+        color=color,
+        updated_at=now,
+        created_at=now,
+    )
+    # Attach demo loop
+    track.loops = [get_demo_loop_for_instrument(instrument, track.id)]
+
+    return track

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api import database
 from api.auth import get_current_user_id
-from api.songs import song_models, song_schemas
+from api.songs import song_models, song_schemas, song_utils
 from api.songs.song_constants import ADJECTIVES, NOUNS
 from api.tracks import track_models
 
@@ -16,10 +16,14 @@ router = APIRouter(prefix="/api/midi", tags=["midi"])
 
 @router.post("/songs/", response_model=song_schemas.SongDetailResponse)
 async def create_song(
-    request: song_schemas.CreateSongRequest, user_id: UUID = Depends(get_current_user_id)
+    request: song_schemas.CreateSongRequest,
+    user_id: UUID | None = Depends(get_current_user_id),
 ) -> song_schemas.SongDetailResponse:
     """
     Create a new song with three default tracks (piano, bass, drums)."""
+    if not user_id:
+        raise HTTPException(status_code=401)
+
     try:
         # Auto-generate title if not provided
         title = request.title
@@ -66,13 +70,14 @@ async def create_song(
 
 
 @router.get("/songs/", response_model=list[song_schemas.SongResponse])
-async def list_songs(user_id: UUID = Depends(get_current_user_id)) -> list[song_schemas.SongResponse]:
+async def list_songs(
+    user_id: UUID | None = Depends(get_current_user_id),
+) -> list[song_schemas.SongResponse]:
     """
     List all songs for the current user.
 
     Args:
-        db: Database session
-        user_id: User ID from Authorization header
+        user_id: User ID from Authorization header (None for demo mode)
 
     Returns:
         List of SongResponse objects
@@ -80,6 +85,10 @@ async def list_songs(user_id: UUID = Depends(get_current_user_id)) -> list[song_
     Raises:
         HTTPException: If retrieval fails
     """
+    # In demo mode, return only the demo song
+    if user_id is None:
+        return [song_utils.get_demo_song().to_response()]
+
     try:
         with database.get_db() as db:
             songs = (
@@ -95,14 +104,16 @@ async def list_songs(user_id: UUID = Depends(get_current_user_id)) -> list[song_
 
 
 @router.get("/songs/{song_id}", response_model=song_schemas.SongDetailResponse)
-async def get_song(song_id: str, user_id: UUID = Depends(get_current_user_id)) -> song_schemas.SongDetailResponse:
+async def get_song(
+    song_id: str,
+    user_id: UUID | None = Depends(get_current_user_id),
+) -> song_schemas.SongDetailResponse:
     """
     Get a specific song with all track details and loops.
 
     Args:
         song_id: Song identifier (path parameter)
-        db: Database session
-        user_id: User ID from Authorization header
+        user_id: User ID from Authorization header (None for demo mode)
 
     Returns:
         SongDetailResponse with tracks and loops
@@ -110,6 +121,13 @@ async def get_song(song_id: str, user_id: UUID = Depends(get_current_user_id)) -
     Raises:
         HTTPException: If song not found or access denied
     """
+    # In demo mode, only allow access to the demo song
+    if song_id == str(song_utils.DEMO_SONG_ID):
+        return song_utils.get_demo_song().to_detail_response()
+
+    if user_id is None:
+        raise HTTPException(status_code=404)
+
     try:
         with database.get_db() as db:
             song = (

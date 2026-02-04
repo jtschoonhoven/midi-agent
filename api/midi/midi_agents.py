@@ -8,7 +8,6 @@ import os
 from typing import TypedDict, cast
 from uuid import UUID
 
-import pydantic
 import weave
 from anthropic import AsyncAnthropic
 from anthropic.types.beta import BetaMessageParam
@@ -20,15 +19,13 @@ from weave.trace.call import Call
 from weave.trace.vals import WeaveList
 
 from api import database
-from api.audio.audio_types import Chord
 from api.chats import chat_models
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
 from api.instruments.instrument_constants import INSTRUMENT_TYPES
 from api.instruments.instrument_types import InstrumentType
 from api.loops import loop_models, loop_utils
-from api.midi import midi_evals, midi_models, midi_utils
-from api.midi.midi_types import MidiEventType
+from api.midi import midi_evals, midi_models, midi_schemas
 from api.songs.song_constants import KEYS, TIME_SIGNATURES
 from api.songs.song_types import Key, TimeSignature
 
@@ -67,7 +64,7 @@ class ChatMessage(TypedDict):
 
 
 ChatHistory = list[ChatMessage]
-GenerateMidiCallResponse = tuple["GenerateMidiResponse", Call]
+GenerateMidiCallResponse = tuple["midi_schemas.GenerateMidiResponse", Call]
 
 _MODEL_CACHE: dict[ModelName, "_GenerateMidi"] = {}
 
@@ -107,7 +104,7 @@ async def generate_midi_for_loop(
 
     for n in range(MAX_ATTEMPTS):
         try:
-            response: tuple[GenerateMidiResponse, Call] = await model.invoke.call(
+            response: tuple[midi_schemas.GenerateMidiResponse, Call] = await model.invoke.call(
                 model,
                 chat_history=chat_history,
                 expect_time_signature=expect_time_signature,
@@ -178,7 +175,7 @@ class _GenerateMidi(weave.Model):
         expect_measures: int,
         expect_instrument: InstrumentType,
         api_key: str,
-    ) -> "GenerateMidiResponse":
+    ) -> "midi_schemas.GenerateMidiResponse":
         """
         Run inference to generate MIDI events using the given model and chat history.
         Injects a constraint to restrict the number of measures generated.
@@ -256,90 +253,6 @@ def update_loop(
         return loop
 
 
-class GeneratedMidiEvent(pydantic.BaseModel):
-    """A MIDI event with optional timing fields (for LLM generation)."""
-
-    chord: Chord | None = pydantic.Field(
-        default=None, description="Underlying chord in the progression (does not necessarily match the current note)"
-    )
-    measure: int | None = pydantic.Field(None, gt=0, description="The measure, starting from 1")
-    beat: int | None = pydantic.Field(None, gt=0, lt=9, description="The beat within the measure, starting from 1")
-    beat_div4: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into quarters")
-    beat_div16: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into 16ths")
-    event: str | MidiEventType = pydantic.Field(
-        description='MIDI note, cc, or GM drum name: "C#4", "Sustain", "Open Hi-Hat'
-    )
-    value: int = pydantic.Field(ge=0, le=100, description="Velocity or CC value, scaled 0-100")
-
-
-class GenerateMidiResponse(pydantic.BaseModel):
-    """Response from generation model with sparse MIDI events and description."""
-
-    description: str = pydantic.Field(
-        description="One-sentence description of the generated loop, describing its musical character, style, or key features"
-    )
-    midi_events: list[GeneratedMidiEvent] = pydantic.Field(description="List of sparse MIDI events")
-
-    def to_midi_events(self) -> list["midi_models.MidiEvent"]:
-        """Convert sparse MIDI events to fully resolved events with explicit timing."""
-        result: list[midi_models.MidiEvent] = []
-
-        chord: Chord | None = None
-        measure = 1
-        beat = 1
-        beat_div4 = 1
-        beat_div16 = 1
-
-        for item in self.midi_events:
-            event = midi_utils.str_to_midi_event(item.event)
-            if event is None:
-                log.warning(f"Skipping invalid MIDI event: {item.event}")
-                continue
-
-            if item.chord and item.chord != chord:
-                chord = item.chord
-            if item.measure and item.measure != measure:
-                measure = item.measure
-                beat = 1
-                beat_div4 = 1
-                beat_div16 = 1
-            if item.beat and item.beat != beat:
-                beat = item.beat
-                beat_div4 = 1
-                beat_div16 = 1
-            if item.beat_div4 and item.beat_div4 != beat_div4:
-                beat_div4 = item.beat_div4
-                beat_div16 = 1
-            if item.beat_div16 and item.beat_div16 != beat_div16:
-                beat_div16 = item.beat_div16
-
-            result.append(
-                midi_models.MidiEvent(
-                    chord=chord,
-                    measure=measure,
-                    beat=beat,
-                    beat_div4=beat_div4,
-                    beat_div16=beat_div16,
-                    event=event,
-                    value=item.value,
-                )
-            )
-
-        # # Add cleanup events after the last measure
-        # sustain_off = MidiEvent(
-        #     measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="Sustain", value=0
-        # all_notes_off = MidiEvent(
-        #     measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="AllNotesOff", value=100
-        # reset_controllers = MidiEvent(
-        #     measure=measure + 1, beat=1, beat_div4=1, beat_div16=1, event="ResetControllers", value=100
-        # )
-        # result.append(sustain_off)
-        # result.append(all_notes_off)
-        # result.append(reset_controllers)
-
-        return result
-
-
 def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None, system_prompt: str) -> ChatHistory:
     """
     Load chat history for the given loop (or just the system prompt if no loop ID is provided).
@@ -374,11 +287,13 @@ def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None,
 @weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_openai(
     model_name: "ModelName", chat_history: ChatHistory, api_key: str
-) -> "GenerateMidiResponse":
+) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncOpenAI(api_key=api_key)
     messages = cast(list[ResponseInputItemParam], chat_history)
-    response = await client.responses.parse(model=model_name, input=messages, text_format=GenerateMidiResponse)
-    if not isinstance(response.output_parsed, GenerateMidiResponse):
+    response = await client.responses.parse(
+        model=model_name, input=messages, text_format=midi_schemas.GenerateMidiResponse
+    )
+    if not isinstance(response.output_parsed, midi_schemas.GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
     return response.output_parsed
 
@@ -386,7 +301,7 @@ async def _generate_midi_openai(
 @weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_anthropic(
     model_name: "ModelName", chat_history: ChatHistory, api_key: str
-) -> "GenerateMidiResponse":
+) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncAnthropic(api_key=api_key)
     system_prompt = ""
     messages: list[BetaMessageParam] = []
@@ -408,10 +323,10 @@ async def _generate_midi_anthropic(
         betas=["structured-outputs-2025-11-13"],
         system=system_prompt or SYSTEM_PROMPT.format(),
         messages=messages,
-        output_format=GenerateMidiResponse,
+        output_format=midi_schemas.GenerateMidiResponse,
     )
 
-    if not isinstance(anthropic_response.parsed_output, GenerateMidiResponse):
+    if not isinstance(anthropic_response.parsed_output, midi_schemas.GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")
 
     return anthropic_response.parsed_output
@@ -433,7 +348,7 @@ if __name__ == "__main__":
         uv run python api/midi/midi_agents.py \
             --user-id=00000000-0000-0000-0000-000000000000 \
             --track-id=00000000-0000-0000-0000-000000000000 \
-            --loop-id=11111111-1111-1111-1111-111111111111 \
+            --loop-id=00000000-0000-0000-0000-000000000000 \
             --prompt="Make it more upbeat"
     ```
     """
@@ -466,7 +381,7 @@ if __name__ == "__main__":
     # Run async invoke
     async def main() -> None:
         try:
-            response: tuple[GenerateMidiResponse, Call] = await model.invoke.call(
+            response: tuple[midi_schemas.GenerateMidiResponse, Call] = await model.invoke.call(
                 model,
                 chat_history=chat_history,
                 expect_time_signature=args.time_signature,
