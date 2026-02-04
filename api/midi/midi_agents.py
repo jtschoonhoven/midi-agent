@@ -3,6 +3,7 @@ Weave (Weights & Biases) models for LLM observability.
 Docs: https://docs.wandb.ai/weave/guides/core-types/models
 """
 
+import json
 import logging
 import os
 from typing import TypedDict, cast
@@ -28,11 +29,85 @@ from api.loops import loop_models, loop_utils
 from api.midi import midi_evals, midi_models, midi_schemas
 from api.songs.song_constants import KEYS, TIME_SIGNATURES
 from api.songs.song_types import Key, TimeSignature
+from api.tracks import track_models
 
 DEFAULT_MODEL_NAME: ModelName = "claude-haiku-4-5"
 MAX_ATTEMPTS = 3
 
 log = logging.getLogger(__name__)
+
+
+# Tool definition for Anthropic API
+GET_ADJACENT_TRACKS_TOOL_ANTHROPIC = {
+    "name": "get_adjacent_tracks_midi",
+    "description": "Get MIDI events from other tracks in the same song. Use this to see what other instruments are playing so you can generate complementary music.",
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
+# Tool definition for OpenAI API
+GET_ADJACENT_TRACKS_TOOL_OPENAI = {
+    "type": "function",
+    "function": {
+        "name": "get_adjacent_tracks_midi",
+        "description": "Get MIDI events from other tracks in the same song. Use this to see what other instruments are playing so you can generate complementary music.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
+
+@weave.op(kind="tool")
+def get_adjacent_tracks_midi(user_id: str | UUID, loop_id: str | UUID) -> list[dict]:
+    """
+    Query MIDI events from adjacent tracks in the same song.
+    Returns a list of tracks with their instrument type and MIDI events.
+    """
+    with database.get_db() as db:
+        # Get the current loop and its track
+        loop = loop_utils.get_loop_for_user(db, user_id, loop_id)
+        if not loop:
+            return []
+
+        current_track_id = loop.track_id
+
+        # Get the song via track
+        track = db.query(track_models.MidiTrack).filter(track_models.MidiTrack.id == current_track_id).first()
+        if not track:
+            return []
+
+        song_id = track.song_id
+
+        # Get all tracks in the same song (excluding current track)
+        adjacent_tracks = (
+            db.query(track_models.MidiTrack)
+            .filter(track_models.MidiTrack.song_id == song_id, track_models.MidiTrack.id != current_track_id)
+            .all()
+        )
+
+        result = []
+        for adj_track in adjacent_tracks:
+            # Collect all MIDI events from all loops in this track
+            all_events = []
+            for adj_loop in adj_track.loops:
+                if adj_loop.midi_events:
+                    all_events.extend(adj_loop.midi_events)
+
+            result.append(
+                {
+                    "track_title": adj_track.title,
+                    "instrument": adj_track.instrument,
+                    "midi_events": all_events,
+                }
+            )
+
+        return result
 
 
 SYSTEM_PROMPT = """You are a helpful music composer. Given a user prompt, generate a musical loop in that style.
@@ -55,7 +130,10 @@ Also provide a brief one-sentence description of what you generated (e.g., "A pl
 "Warm sustained chords creating an ambient atmosphere").
 
 Carefully consider the timing of notes (measure/beat) as well as their duration (delta from note-on to note-off).
-IMPORTANT: THE NUMBER OF NOTE-ON EVENTS *MUST* EQUAL THE NUMBER OF NOTE-OFF EVENTS (value=0) FOR EACH NOTE!!"""
+IMPORTANT: THE NUMBER OF NOTE-ON EVENTS *MUST* EQUAL THE NUMBER OF NOTE-OFF EVENTS (value=0) FOR EACH NOTE!!
+
+You have access to the `get_adjacent_tracks_midi` tool which lets you see what other instruments in the song are playing.
+Use this to generate complementary music that fits well with the existing tracks."""
 
 
 class ChatMessage(TypedDict):
@@ -113,6 +191,8 @@ async def generate_midi_for_loop(
                 expect_measures=expect_measures,
                 expect_instrument=expect_instrument,
                 api_key=api_key,
+                user_id=user_id,
+                loop_id=loop_id,
             )
             result, call = response
             score_result: ApplyScorerResult = await call.apply_scorer(
@@ -175,6 +255,8 @@ class _GenerateMidi(weave.Model):
         expect_measures: int,
         expect_instrument: InstrumentType,
         api_key: str,
+        user_id: str | UUID | None = None,
+        loop_id: str | UUID | None = None,
     ) -> "midi_schemas.GenerateMidiResponse":
         """
         Run inference to generate MIDI events using the given model and chat history.
@@ -197,10 +279,12 @@ class _GenerateMidi(weave.Model):
         provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
         if provider == "openai":
-            return await _generate_midi_openai(self.model_name, chat_history, api_key)
+            return await _generate_midi_openai(self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id)
 
         elif provider == "anthropic":
-            return await _generate_midi_anthropic(self.model_name, chat_history, api_key)
+            return await _generate_midi_anthropic(
+                self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
+            )
 
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
@@ -286,10 +370,56 @@ def load_chat_history(*, user_id: str | UUID | None, loop_id: str | UUID | None,
 
 @weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_openai(
-    model_name: "ModelName", chat_history: ChatHistory, api_key: str
+    model_name: "ModelName",
+    chat_history: ChatHistory,
+    api_key: str,
+    user_id: str | UUID | None = None,
+    loop_id: str | UUID | None = None,
 ) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncOpenAI(api_key=api_key)
     messages = cast(list[ResponseInputItemParam], chat_history)
+
+    # Only include tools if we have context to execute them
+    tools = [GET_ADJACENT_TRACKS_TOOL_OPENAI] if user_id and loop_id else None
+
+    # First pass: allow the model to use tools if needed
+    if tools:
+        response = await client.responses.create(
+            model=model_name,
+            input=messages,
+            tools=tools,
+        )
+
+        # Handle tool calls in a loop (max 3 iterations)
+        for _ in range(3):
+            # Check if there are any function calls in the output
+            function_calls = [item for item in response.output if item.type == "function_call"]
+            if not function_calls:
+                break
+
+            # Add all output items to messages
+            messages.extend(response.output)
+
+            # Execute function calls and add results
+            for call in function_calls:
+                if call.name == "get_adjacent_tracks_midi":
+                    result = get_adjacent_tracks_midi(user_id, loop_id)
+                    messages.append(
+                        {
+                            "type": "function_call_output",
+                            "call_id": call.call_id,
+                            "output": json.dumps(result),
+                        }
+                    )
+
+            # Continue the conversation
+            response = await client.responses.create(
+                model=model_name,
+                input=messages,
+                tools=tools,
+            )
+
+    # Final pass: get structured output
     response = await client.responses.parse(
         model=model_name, input=messages, text_format=midi_schemas.GenerateMidiResponse
     )
@@ -300,7 +430,11 @@ async def _generate_midi_openai(
 
 @weave.op(postprocess_inputs=_redact_api_key)
 async def _generate_midi_anthropic(
-    model_name: "ModelName", chat_history: ChatHistory, api_key: str
+    model_name: "ModelName",
+    chat_history: ChatHistory,
+    api_key: str,
+    user_id: str | UUID | None = None,
+    loop_id: str | UUID | None = None,
 ) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncAnthropic(api_key=api_key)
     system_prompt = ""
@@ -317,11 +451,57 @@ async def _generate_midi_anthropic(
         else:
             raise HTTPException(status_code=400, detail=f"Unknown message role: {msg['role']}")
 
+    # Only include tools if we have context to execute them
+    tools = [GET_ADJACENT_TRACKS_TOOL_ANTHROPIC] if user_id and loop_id else None
+
+    # First pass: allow the model to use tools if needed
+    if tools:
+        response = await client.messages.create(
+            model=model_name,
+            max_tokens=4096,
+            system=system_prompt or SYSTEM_PROMPT,
+            messages=messages,
+            tools=tools,
+        )
+
+        # Handle tool use in a loop (max 3 iterations to prevent infinite loops)
+        for _ in range(3):
+            if response.stop_reason != "tool_use":
+                break
+
+            # Find tool use blocks and execute them
+            tool_results = []
+            assistant_content = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    assistant_content.append(block)
+                    if block.name == "get_adjacent_tracks_midi":
+                        result = get_adjacent_tracks_midi(user_id, loop_id)
+                        tool_results.append(
+                            {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)}
+                        )
+                elif block.type == "text":
+                    assistant_content.append(block)
+
+            # Add assistant message with tool use and tool results
+            messages.append(BetaMessageParam(role="assistant", content=assistant_content))
+            messages.append(BetaMessageParam(role="user", content=tool_results))
+
+            # Continue the conversation
+            response = await client.messages.create(
+                model=model_name,
+                max_tokens=4096,
+                system=system_prompt or SYSTEM_PROMPT,
+                messages=messages,
+                tools=tools,
+            )
+
+    # Final pass: get structured output
     anthropic_response = await client.beta.messages.parse(
         model=model_name,
         max_tokens=4096,
         betas=["structured-outputs-2025-11-13"],
-        system=system_prompt or SYSTEM_PROMPT.format(),
+        system=system_prompt or SYSTEM_PROMPT,
         messages=messages,
         output_format=midi_schemas.GenerateMidiResponse,
     )
