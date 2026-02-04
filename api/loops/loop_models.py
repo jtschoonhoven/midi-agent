@@ -27,7 +27,7 @@ class MidiLoop(Base):
     measures: Mapped[int] = mapped_column(Integer, nullable=False)
     extend_measures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     midi_events: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
-    track_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_tracks.id"), nullable=False, index=True)
+    track_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_tracks.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

@@ -28,7 +28,7 @@ class ChatMessage(Base):
     )
     msg: Mapped[str] = mapped_column(Text, nullable=False)
     midi_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
-    loop_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_loops.id"), nullable=False, index=True)
+    loop_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_loops.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
