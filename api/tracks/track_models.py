@@ -28,7 +28,9 @@ class MidiTrack(Base):
     __table_args__ = (CheckConstraint("midi_channel > 0", name="midi_channel_positive"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    song_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("midi_songs.id", ondelete="CASCADE"), nullable=False, index=True)
+    song_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("midi_songs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     midi_channel: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     instrument: Mapped[InstrumentType] = mapped_column(

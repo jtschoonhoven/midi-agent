@@ -1,7 +1,6 @@
 """FastAPI routes for MIDI loops."""
 
 from uuid import UUID
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
