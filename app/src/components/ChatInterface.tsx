@@ -34,6 +34,8 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   useMediaQuery,
+  Alert,
+  Link,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
@@ -43,7 +45,6 @@ import PauseIcon from "@mui/icons-material/Pause";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
-import DownloadIcon from "@mui/icons-material/Download";
 import {
   listSongs,
   createSong,
@@ -116,6 +117,9 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
 
   // Determine the actual active theme (user selection or system default)
   const activeTheme = themeMode === null ? (prefersDarkMode ? "dark" : "light") : themeMode;
+
+  // Check if user is in demo mode (not authenticated)
+  const isDemo = !hasStoredApiKey();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -826,6 +830,9 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
 
   // Handle loop drop to update offset
   const handleLoopDrop = async (loopId: string, dropMeasure: number, dragItem: DragItem) => {
+    // Don't allow drops in demo mode
+    if (isDemo) return;
+
     try {
       // Calculate the actual new offset based on where the loop was grabbed
       const grabOffset = dragItem.dragGrabOffset || 0;
@@ -883,6 +890,9 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
 
   // Handle drag-to-create loop start
   const handleDragCreateStart = (measureIndex: number, trackId: string, track: TrackDetail) => {
+    // Don't allow creating loops in demo mode
+    if (isDemo) return;
+
     // Check if there's already a loop at this position
     const hasLoopAtPosition = track.loops?.some((loop) => {
       const loopStart = loop.offset || 0;
@@ -984,6 +994,9 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
 
   // Handle loop resize start
   const handleLoopResizeStart = (e: React.MouseEvent, loop: Loop, _track: TrackDetail) => {
+    // Don't allow resizing loops in demo mode
+    if (isDemo) return;
+
     e.stopPropagation(); // Prevent loop card click
     setIsResizingLoop(true);
     setResizingLoopId(loop.id);
@@ -1106,7 +1119,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                 setShowNewSongModal(true);
                 setDrawerOpen(false);
               }}
-              disabled={isCreatingSong}
+              disabled={isCreatingSong || isDemo}
             >
               New Song
             </Button>
@@ -1223,6 +1236,23 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
         </Toolbar>
       </AppBar>
 
+      {/* Demo Mode Banner */}
+      {isDemo && (
+        <Alert
+          severity="info"
+          sx={{
+            borderRadius: 0,
+            justifyContent: "center",
+          }}
+        >
+          You are in read-only demo mode.{" "}
+          <Link component="button" onClick={onRequestAuth} sx={{ fontWeight: "medium", verticalAlign: "baseline" }}>
+            Sign in
+          </Link>{" "}
+          with your Anthropic API key to create and edit songs.
+        </Alert>
+      )}
+
       {/* Main content area */}
       {isLoadingSongDetail ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -1284,16 +1314,19 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                   height: 140,
                   border: "2px dashed",
                   borderColor: "divider",
-                  cursor: "pointer",
+                  cursor: isDemo ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  "&:hover": {
-                    borderColor: "primary.main",
-                    bgcolor: "action.hover",
-                  },
+                  opacity: isDemo ? 0.5 : 1,
+                  "&:hover": isDemo
+                    ? {}
+                    : {
+                        borderColor: "primary.main",
+                        bgcolor: "action.hover",
+                      },
                 }}
-                onClick={handleCreateTrack}
+                onClick={isDemo ? undefined : handleCreateTrack}
               >
                 <CardContent sx={{ textAlign: "center", p: 2 }}>
                   <Stack alignItems="center" spacing={1}>
@@ -1443,8 +1476,8 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                           const [{ isOver, canDrop }, drop] = useDrop(() => ({
                             accept: ITEM_TYPE,
                             canDrop: (item: DragItem, _monitor) => {
-                              // Don't allow drops during playback
-                              if (isPlaying) return false;
+                              // Don't allow drops in demo mode or during playback
+                              if (isDemo || isPlaying) return false;
 
                               // Only allow drops on the same track
                               if (item.trackId !== track.id) return false;
@@ -1539,7 +1572,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                                         ? "primary.light"
                                         : "transparent",
                                 transition: "background-color 0.1s",
-                                cursor: isPlaying ? "default" : hasLoopAtPosition ? "default" : "ew-resize",
+                                cursor: isPlaying || isDemo ? "default" : hasLoopAtPosition ? "default" : "ew-resize",
                                 opacity: isInDragSelection ? 0.6 : 1,
                               }}
                             />
@@ -1566,7 +1599,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                         const DraggableLoop = () => {
                           const [{ isDragging }, drag] = useDrag(() => ({
                             type: ITEM_TYPE,
-                            canDrag: () => !isPlaying && !isResizingLoop,
+                            canDrag: () => !isPlaying && !isResizingLoop && !isDemo,
                             item: (monitor) => {
                               // Calculate which measure within the loop was grabbed
                               const initialOffset = monitor.getInitialClientOffset();
@@ -1601,13 +1634,14 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
 
                           return (
                             <Card
-                              ref={isGenerating || isPlaying || isBeingResized ? undefined : (drag as any)}
+                              ref={isGenerating || isPlaying || isBeingResized || isDemo ? undefined : (drag as any)}
                               sx={{
                                 position: "absolute",
                                 left: `${left}px`,
                                 width: `${width}px`,
                                 height: 140,
-                                cursor: isGenerating || isPlaying ? "pointer" : isDragging ? "grabbing" : "grab",
+                                cursor:
+                                  isGenerating || isPlaying || isDemo ? "pointer" : isDragging ? "grabbing" : "grab",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -1650,7 +1684,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                               </CardContent>
 
                               {/* Resize handle on right edge */}
-                              {!isGenerating && !isPlaying && (
+                              {!isGenerating && !isPlaying && !isDemo && (
                                 <Box
                                   onMouseDown={(e) => handleLoopResizeStart(e, loop, track)}
                                   sx={{
@@ -1718,7 +1752,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                 value={newSongKey}
                 label="Key"
                 onChange={(e) => setNewSongKey(e.target.value as CreateSongRequest["key"])}
-                disabled={isCreatingSong}
+                disabled={isCreatingSong || isDemo}
               >
                 {SONG_KEYS.map((key) => (
                   <MenuItem key={key} value={key}>
@@ -1737,7 +1771,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                 value={newSongTimeSignature}
                 label="Time Signature"
                 onChange={(e) => setNewSongTimeSignature(e.target.value)}
-                disabled={isCreatingSong}
+                disabled={isCreatingSong || isDemo}
               >
                 <MenuItem value="4/4">4/4</MenuItem>
                 <MenuItem value="3/4">3/4</MenuItem>
@@ -1756,7 +1790,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
               value={newSongBpm}
               onChange={(e) => setNewSongBpm(parseInt(e.target.value) || 120)}
               inputProps={{ min: 30, max: 300, step: 1 }}
-              disabled={isCreatingSong}
+              disabled={isCreatingSong || isDemo}
             />
           </Stack>
 
@@ -1766,7 +1800,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                 Cancel
               </Button>
             )}
-            <Button variant="contained" fullWidth onClick={handleCreateSong} disabled={isCreatingSong}>
+            <Button variant="contained" fullWidth onClick={handleCreateSong} disabled={isCreatingSong || isDemo}>
               {isCreatingSong ? <CircularProgress size={24} /> : "Create Song"}
             </Button>
           </Stack>
@@ -1830,7 +1864,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                   required
                   inputProps={{ min: 1, max: 32 }}
                   helperText="Enter a value between 1 and 32"
-                  disabled={isCreatingLoop}
+                  disabled={isCreatingLoop || isDemo}
                 />
 
                 <TextField
@@ -1841,7 +1875,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                     // Check for Command+Enter (Mac) or Ctrl+Enter (Windows/Linux)
                     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                       e.preventDefault();
-                      if (loopPrompt.trim() && !isCreatingLoop) {
+                      if (loopPrompt.trim() && !isCreatingLoop && !isDemo) {
                         handleSubmitLoop();
                       }
                     }
@@ -1853,7 +1887,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                   rows={6}
                   placeholder="Describe what you want to create... (e.g., 'A funky bassline in C minor')"
                   helperText="Cmd+Enter to send"
-                  disabled={isCreatingLoop}
+                  disabled={isCreatingLoop || isDemo}
                 />
               </Stack>
             ) : (
@@ -1908,7 +1942,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                         // Check for Command+Enter (Mac) or Ctrl+Enter (Windows/Linux)
                         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                           e.preventDefault();
-                          if (loopPrompt.trim() && !isCreatingLoop) {
+                          if (loopPrompt.trim() && !isCreatingLoop && !isDemo) {
                             handleSubmitLoop();
                           }
                         }
@@ -1919,7 +1953,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                       rows={3}
                       placeholder="Continue the conversation..."
                       helperText="Cmd+Enter to send"
-                      disabled={isCreatingLoop}
+                      disabled={isCreatingLoop || isDemo}
                     />
                   </Stack>
                 )}
@@ -1975,20 +2009,10 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                     variant="outlined"
                     color="error"
                     onClick={handleDeleteLoop}
-                    disabled={isCreatingLoop || isDeletingLoop}
+                    disabled={isCreatingLoop || isDeletingLoop || isDemo}
                   >
                     {isDeletingLoop ? <CircularProgress size={24} /> : "Delete"}
                   </Button>
-                  {selectedLoop && selectedLoop.midi_events && selectedLoop.midi_events.length > 0 && (
-                    <Button
-                      variant="outlined"
-                      onClick={handleDownloadLoop}
-                      disabled={isCreatingLoop || isDeletingLoop || isDownloadingLoop}
-                      startIcon={isDownloadingLoop ? undefined : <DownloadIcon />}
-                    >
-                      {isDownloadingLoop ? <CircularProgress size={24} /> : "Download WAV"}
-                    </Button>
-                  )}
                 </Stack>
               ) : (
                 <Box /> // Empty spacer in create mode
@@ -2007,7 +2031,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                   <Button
                     variant="contained"
                     onClick={handleSubmitLoop}
-                    disabled={isCreatingLoop || isDeletingLoop || !loopPrompt.trim()}
+                    disabled={isCreatingLoop || isDeletingLoop || !loopPrompt.trim() || isDemo}
                   >
                     {isCreatingLoop ? (
                       <CircularProgress size={24} />
@@ -2056,7 +2080,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
               value={editedTrackTitle}
               onChange={(e) => setEditedTrackTitle(e.target.value)}
               fullWidth
-              disabled={isUpdatingTrack || isDeletingTrack}
+              disabled={isUpdatingTrack || isDeletingTrack || isDemo}
               required
             />
 
@@ -2066,13 +2090,13 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
               value={editedTrackChannel}
               onChange={(e) => setEditedTrackChannel(parseInt(e.target.value) || 1)}
               fullWidth
-              disabled={isUpdatingTrack || isDeletingTrack}
+              disabled={isUpdatingTrack || isDeletingTrack || isDemo}
               inputProps={{ min: 1, max: 16, step: 1 }}
               helperText="MIDI channel (1-16)"
               required
             />
 
-            <FormControl fullWidth disabled={isUpdatingTrack || isDeletingTrack}>
+            <FormControl fullWidth disabled={isUpdatingTrack || isDeletingTrack || isDemo}>
               <InputLabel id="instrument-select-label">Instrument</InputLabel>
               <Select
                 labelId="instrument-select-label"
@@ -2093,7 +2117,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
               variant="outlined"
               color="error"
               onClick={handleDeleteTrack}
-              disabled={isDeletingTrack || isUpdatingTrack}
+              disabled={isDeletingTrack || isUpdatingTrack || isDemo}
             >
               {isDeletingTrack ? <CircularProgress size={24} /> : "Delete"}
             </Button>
@@ -2108,7 +2132,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
               <Button
                 variant="contained"
                 onClick={handleUpdateTrack}
-                disabled={isDeletingTrack || isUpdatingTrack || !editedTrackTitle.trim()}
+                disabled={isDeletingTrack || isUpdatingTrack || !editedTrackTitle.trim() || isDemo}
               >
                 {isUpdatingTrack ? <CircularProgress size={24} /> : "Save"}
               </Button>
