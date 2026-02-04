@@ -58,6 +58,7 @@ import {
   updateTrack,
   downloadLoopWav,
 } from "../lib/api";
+import { hasStoredApiKey } from "../lib/auth";
 import { useDrag, useDrop } from "react-dnd";
 import { usePlayback } from "../contexts/PlaybackContext";
 import { useThemeMode } from "../contexts/ThemeContext";
@@ -89,7 +90,11 @@ type CreateSongRequest = components["schemas"]["CreateSongRequest"];
 const SONG_KEYS = (openApiSchema as any).components.schemas.CreateSongRequest.properties.key
   .enum as CreateSongRequest["key"][];
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  onRequestAuth?: () => void;
+}
+
+export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
   const {
     isPlaying,
     bpm,
@@ -1194,6 +1199,13 @@ export default function ChatInterface() {
               <Brightness4Icon fontSize="small" />
             </ToggleButton>
           </ToggleButtonGroup>
+
+          {/* Sign In button when not authenticated */}
+          {!hasStoredApiKey() && onRequestAuth && (
+            <Button color="inherit" onClick={onRequestAuth} sx={{ ml: 2 }}>
+              Sign In
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 

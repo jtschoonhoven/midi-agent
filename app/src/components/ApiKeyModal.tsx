@@ -14,9 +14,11 @@ import {
 interface ApiKeyModalProps {
   open: boolean;
   onSubmit: (apiKey: string) => void;
+  onClose?: () => void;
+  allowClose?: boolean;
 }
 
-export default function ApiKeyModal({ open, onSubmit }: ApiKeyModalProps) {
+export default function ApiKeyModal({ open, onSubmit, onClose, allowClose = false }: ApiKeyModalProps) {
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
 
@@ -44,13 +46,21 @@ export default function ApiKeyModal({ open, onSubmit }: ApiKeyModalProps) {
     }
   };
 
+  const handleClose = () => {
+    if (allowClose && onClose) {
+      setError("");
+      setApiKey("");
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={() => {}} maxWidth="sm" fullWidth disableEscapeKeyDown>
-      <DialogTitle>Enter Anthropic API Key</DialogTitle>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth disableEscapeKeyDown={!allowClose}>
+      <DialogTitle>Sign In with Anthropic API Key</DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <Typography variant="body2" color="textSecondary">
-            To use this app, you need an Anthropic API key. You can get one at{" "}
+            Sign in with your Anthropic API key to save your work and use AI features. You can get a key at{" "}
             <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">
               console.anthropic.com
             </a>
@@ -73,8 +83,13 @@ export default function ApiKeyModal({ open, onSubmit }: ApiKeyModalProps) {
         </Box>
       </DialogContent>
       <DialogActions>
+        {allowClose && (
+          <Button onClick={handleClose} color="inherit">
+            Continue exploring demo
+          </Button>
+        )}
         <Button onClick={handleSubmit} variant="contained" color="primary">
-          Continue
+          Sign In
         </Button>
       </DialogActions>
     </Dialog>
