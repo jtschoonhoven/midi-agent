@@ -57,31 +57,26 @@ def create_demo_song_for_user(db: Session, user_id: UUID) -> song_models.MidiSon
     """
     song = get_demo_song()
 
-    # Make transient and clear ID so DB generates a new one
-    make_transient(song)
-    song.id = None  # type: ignore[assignment]
-    song.user_id = user_id
-    db.add(song)
-    db.flush()
-
+    # Make all entities transient and clear IDs/foreign keys before adding to session.
+    # The relationship cascade will handle adding children and setting FKs automatically.
     for track in song.tracks:
-        make_transient(track)
-        track.id = None  # type: ignore[assignment]
-        track.song_id = song.id
-        db.add(track)
-        db.flush()
-
         for loop in track.loops:
-            make_transient(loop)
-            loop.id = None  # type: ignore[assignment]
-            loop.track_id = track.id
-            db.add(loop)
-            db.flush()
-
             for chat in loop.chat_messages:
                 make_transient(chat)
                 chat.id = None  # type: ignore[assignment]
-                chat.loop_id = loop.id
-                db.add(chat)
+                chat.loop_id = None  # type: ignore[assignment]
+            make_transient(loop)
+            loop.id = None  # type: ignore[assignment]
+            loop.track_id = None  # type: ignore[assignment]
+        make_transient(track)
+        track.id = None  # type: ignore[assignment]
+        track.song_id = None  # type: ignore[assignment]
+
+    make_transient(song)
+    song.id = None  # type: ignore[assignment]
+    song.user_id = user_id
+
+    # Add song - cascade="all, delete-orphan" handles children via relationships
+    db.add(song)
 
     return song
