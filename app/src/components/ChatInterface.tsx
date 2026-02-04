@@ -58,7 +58,7 @@ import {
   updateTrack,
   downloadLoopWav,
 } from "../lib/api";
-import { hasStoredApiKey } from "../lib/auth";
+import { hasStoredApiKey, clearApiKey } from "../lib/auth";
 import { useDrag, useDrop } from "react-dnd";
 import { usePlayback } from "../contexts/PlaybackContext";
 import { useThemeMode } from "../contexts/ThemeContext";
@@ -1204,6 +1204,20 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
           {!hasStoredApiKey() && onRequestAuth && (
             <Button color="inherit" onClick={onRequestAuth} sx={{ ml: 2 }}>
               Sign In
+            </Button>
+          )}
+
+          {/* Sign Out button when authenticated */}
+          {hasStoredApiKey() && (
+            <Button
+              color="inherit"
+              onClick={() => {
+                clearApiKey();
+                window.location.reload();
+              }}
+              sx={{ ml: 2 }}
+            >
+              Sign Out
             </Button>
           )}
         </Toolbar>
