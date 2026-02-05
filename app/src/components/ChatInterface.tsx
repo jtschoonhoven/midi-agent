@@ -148,7 +148,6 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
   const [isLoadingChat, setIsLoadingChat] = useState(false);
   const [activeTab, setActiveTab] = useState<number>(0);
   const [isDeletingLoop, setIsDeletingLoop] = useState(false);
-  const [isDownloadingLoop, setIsDownloadingLoop] = useState(false);
   const [isCreatingTrack, setIsCreatingTrack] = useState(false);
 
   // Track modal state
@@ -667,23 +666,6 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
       alert("Failed to delete loop. Please try again.");
     } finally {
       setIsDeletingLoop(false);
-    }
-  };
-
-  const handleDownloadLoop = async () => {
-    if (!selectedLoop) {
-      alert("No loop selected");
-      return;
-    }
-
-    try {
-      setIsDownloadingLoop(true);
-      await downloadLoopWav(selectedLoop.id);
-    } catch (error) {
-      console.error("Failed to download loop:", error);
-      alert("Failed to download loop. Please try again.");
-    } finally {
-      setIsDownloadingLoop(false);
     }
   };
 
