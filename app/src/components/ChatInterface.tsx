@@ -57,7 +57,6 @@ import {
   createTrack,
   deleteTrack,
   updateTrack,
-  downloadLoopWav,
 } from "../lib/api";
 import { hasStoredApiKey, clearApiKey } from "../lib/auth";
 import { useDrag, useDrop } from "react-dnd";
