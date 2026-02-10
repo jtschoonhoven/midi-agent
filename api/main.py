@@ -19,6 +19,7 @@ from api import auth
 from api.database import init_db
 from api.instruments import instrument_routes, instrument_utils
 from api.loops import loop_routes
+from api.midi import midi_agents
 from api.songs import song_routes
 from api.tracks import track_routes
 
@@ -130,6 +131,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 def startup_event() -> None:
     load_dotenv()
     weave.init(os.environ["PROJECT_ID"])
+    midi_agents.init_scorers()
 
     init_db()
     instrument_utils.init_db()

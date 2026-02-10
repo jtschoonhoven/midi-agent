@@ -512,6 +512,43 @@ async def _generate_midi_anthropic(
     return anthropic_response.parsed_output
 
 
+def init_scorers() -> None:
+    """
+    Initialize and publish weave "human annotation scorers".
+    https://docs.wandb.ai/weave/guides/tracking/feedback#create-a-human-annotation-scorer-using-the-api
+    """
+    musicality_spec = weave.AnnotationSpec(
+        name="Quality",
+        description="Subjective quality score, 0-10 (inclusive)",
+        field_schema={"type": "integer", "minimum": 0, "maximum": 10},
+    )
+    weave.publish(musicality_spec, "quality-scorer")
+
+    genre_spec = weave.AnnotationSpec(
+        name="Genre",
+        description="Closest genre match for the generated music",
+        field_schema={
+            "type": "string",
+            "enum": [
+                "Rock",
+                "Jazz",
+                "Classical",
+                "Electronic",
+                "Hip-Hop",
+                "R&B",
+                "Country",
+                "Funk",
+                "Reggae",
+                "Latin",
+                "Ambient",
+                "Experimental",
+                "Other",
+            ],
+        },
+    )
+    weave.publish(genre_spec, "genre-scorer")
+
+
 if __name__ == "__main__":
     """
     Invoke the GenerateMidi model directly from the CLI.
