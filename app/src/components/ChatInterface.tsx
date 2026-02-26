@@ -45,6 +45,8 @@ import PauseIcon from "@mui/icons-material/Pause";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import {
   listSongs,
   createSong,
@@ -110,6 +112,10 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
     setSelectedMidiOutput,
     requestMidiAccess,
     hasMidiAccess,
+    mutedTracks,
+    soloedTracks,
+    toggleMute,
+    toggleSolo,
   } = usePlayback();
   const { themeMode, setThemeMode } = useThemeMode();
   const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
@@ -174,6 +180,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
   const [loopZoneStart, setLoopZoneStart] = useState<number | null>(null);
   const [loopZoneEnd, setLoopZoneEnd] = useState<number | null>(null);
   const [isDraggingLoopZone, setIsDraggingLoopZone] = useState(false);
+  const [pendingLoopDragMeasure, setPendingLoopDragMeasure] = useState<number | null>(null);
 
   // Track loop resize state
   const [isResizingLoop, setIsResizingLoop] = useState(false);
@@ -296,6 +303,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
       if (isDraggingLoopZone) {
         handleLoopZoneDragEnd();
       }
+      setPendingLoopDragMeasure(null);
     };
 
     window.addEventListener("mouseup", handleMouseUp);
@@ -923,30 +931,22 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
   };
 
   // Handle loop zone drag start (in ruler bar)
+  // Only records the pending measure; actual drag begins when mouse moves to a different measure.
   const handleLoopZoneDragStart = (measureIndex: number) => {
-    // If clicking on an existing loop zone, remove it
-    if (loopZoneStart !== null && loopZoneEnd !== null) {
-      const minZone = Math.min(loopZoneStart, loopZoneEnd);
-      const maxZone = Math.max(loopZoneStart, loopZoneEnd);
-      if (measureIndex >= minZone && measureIndex <= maxZone) {
-        // Clear the loop zone
-        setLoopZoneStart(null);
-        setLoopZoneEnd(null);
-        setLoopZone(null, null);
-        return;
-      }
-    }
-
-    // Start new loop zone drag
-    setIsDraggingLoopZone(true);
-    setLoopZoneStart(measureIndex);
-    setLoopZoneEnd(measureIndex);
+    setPendingLoopDragMeasure(measureIndex);
   };
 
   // Handle loop zone drag move (in ruler bar)
+  // Activates the drag only once the mouse moves to a different measure than the initial mouseDown.
   const handleLoopZoneDragMove = (measureIndex: number) => {
     if (isDraggingLoopZone && loopZoneStart !== null) {
       setLoopZoneEnd(measureIndex);
+    } else if (pendingLoopDragMeasure !== null && measureIndex !== pendingLoopDragMeasure) {
+      // Mouse moved to a different measure — commit to a loop drag
+      setIsDraggingLoopZone(true);
+      setLoopZoneStart(pendingLoopDragMeasure);
+      setLoopZoneEnd(measureIndex);
+      setPendingLoopDragMeasure(null);
     }
   };
 
@@ -971,6 +971,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
     }
 
     setIsDraggingLoopZone(false);
+    setPendingLoopDragMeasure(null);
   };
 
   // Handle loop resize start
@@ -1274,7 +1275,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                   }}
                   onClick={() => handleOpenTrackModal(track)}
                 >
-                  <CardContent sx={{ textAlign: "center", p: 2 }}>
+                  <CardContent sx={{ textAlign: "center", p: 2, "&:last-child": { pb: 1 } }}>
                     <Typography variant="h6" gutterBottom>
                       {track.title}
                     </Typography>
@@ -1284,6 +1285,50 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                     <Typography variant="caption" color="text.secondary" sx={{ textTransform: "capitalize" }}>
                       {track.instrument}
                     </Typography>
+                    <Stack direction="row" spacing={0.5} justifyContent="center" sx={{ mt: 1 }}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMute(track.id);
+                        }}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          bgcolor: mutedTracks.has(track.id) ? "error.main" : "action.hover",
+                          color: mutedTracks.has(track.id) ? "error.contrastText" : "text.secondary",
+                          "&:hover": {
+                            bgcolor: mutedTracks.has(track.id) ? "error.dark" : "action.selected",
+                          },
+                        }}
+                        title="Mute"
+                      >
+                        {mutedTracks.has(track.id) ? <VolumeOffIcon sx={{ fontSize: 16 }} /> : <Typography variant="caption" sx={{ fontWeight: "bold", fontSize: "0.7rem" }}>M</Typography>}
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSolo(track.id);
+                        }}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          bgcolor: soloedTracks.has(track.id) ? "warning.main" : "action.hover",
+                          color: soloedTracks.has(track.id) ? "warning.contrastText" : "text.secondary",
+                          "&:hover": {
+                            bgcolor: soloedTracks.has(track.id) ? "warning.dark" : "action.selected",
+                          },
+                        }}
+                        title="Solo"
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: "bold", fontSize: "0.7rem" }}>S</Typography>
+                      </IconButton>
+                    </Stack>
                   </CardContent>
                 </Card>
               ))}
@@ -1398,8 +1443,15 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
                             handleLoopZoneDragMove(i);
                           }}
                           onClick={() => {
-                            // Only seek playback if not dragging a loop zone
-                            if (!isDraggingLoopZone && !isInLoopZone) {
+                            // A click (no drag) always seeks playback.
+                            // If a drag occurred, isDraggingLoopZone is true and we skip.
+                            if (!isDraggingLoopZone) {
+                              // If clicking inside an existing loop zone, clear it
+                              if (isInLoopZone) {
+                                setLoopZoneStart(null);
+                                setLoopZoneEnd(null);
+                                setLoopZone(null, null);
+                              }
                               const startBeat = i * beatsPerMeasure;
                               playFromBeat(startBeat);
                             }

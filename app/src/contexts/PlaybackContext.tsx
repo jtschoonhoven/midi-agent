@@ -68,6 +68,10 @@ interface PlaybackContextType {
   requestMidiAccess: () => Promise<void>;
   hasMidiAccess: boolean;
   setLoopZone: (startBeat: number | null, endBeat: number | null) => void;
+  mutedTracks: Set<string>;
+  soloedTracks: Set<string>;
+  toggleMute: (trackId: string) => void;
+  toggleSolo: (trackId: string) => void;
 }
 
 const PlaybackContext = createContext<PlaybackContextType | undefined>(undefined);
@@ -93,6 +97,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [hasMidiAccess, setHasMidiAccess] = useState(false);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
   const audioContextStartedRef = useRef<boolean>(false);
+  const [mutedTracks, setMutedTracks] = useState<Set<string>>(new Set());
+  const [soloedTracks, setSoloedTracks] = useState<Set<string>>(new Set());
+  const mutedTracksRef = useRef<Set<string>>(new Set());
+  const soloedTracksRef = useRef<Set<string>>(new Set());
 
   // Store all instruments and samples from backend
   type Instrument = {
@@ -129,6 +137,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loopZoneEndRef.current = loopZoneEnd;
   }, [loopZoneEnd]);
+
+  useEffect(() => {
+    mutedTracksRef.current = mutedTracks;
+  }, [mutedTracks]);
+
+  useEffect(() => {
+    soloedTracksRef.current = soloedTracks;
+  }, [soloedTracks]);
+
+  const toggleMute = useCallback((trackId: string) => {
+    setMutedTracks((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSolo = useCallback((trackId: string) => {
+    setSoloedTracks((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  }, []);
 
   // Get beats per measure from time signature string (e.g., "4/4" -> 4, "3/4" -> 3, "6/8" -> 6)
   const getBeatsPerMeasure = (timeSignature?: string): number => {
@@ -264,6 +304,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const eventsToSend: Array<{ channel: number; event: MidiEvent }> = [];
 
       currentSongData.tracks.forEach((track) => {
+        // Skip muted tracks, and skip non-soloed tracks when any track is soloed
+        const muted = mutedTracksRef.current;
+        const soloed = soloedTracksRef.current;
+        if (muted.has(track.id)) return;
+        if (soloed.size > 0 && !soloed.has(track.id)) return;
+
         track.loops.forEach((loop) => {
           const loopStartBeat = loop.offset * beatsPerMeasure;
           const totalMeasures = loop.measures + loop.extend_measures;
@@ -639,6 +685,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         requestMidiAccess,
         hasMidiAccess,
         setLoopZone,
+        mutedTracks,
+        soloedTracks,
+        toggleMute,
+        toggleSolo,
       }}
     >
       {children}
