@@ -19,7 +19,7 @@ from weave.flow.scorer import ApplyScorerResult
 from weave.trace.call import Call
 from weave.trace.vals import WeaveList
 
-from api import database
+from api import database, otel
 from api.chats import chat_models
 from api.chats.chat_constants import MODEL_PROVIDER_MAP
 from api.chats.chat_types import ModelName
@@ -278,16 +278,19 @@ class _GenerateMidi(weave.Model):
         # Get provider from the map (returns tuple of (provider, model_name))
         provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
-        if provider == "openai":
-            return await _generate_midi_openai(self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id)
+        with otel.invoke_agent_span(agent_name="midi-generator", provider=provider, model=self.model_name):
+            if provider == "openai":
+                return await _generate_midi_openai(
+                    self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
+                )
 
-        elif provider == "anthropic":
-            return await _generate_midi_anthropic(
-                self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
-            )
+            elif provider == "anthropic":
+                return await _generate_midi_anthropic(
+                    self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
+                )
 
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
 
 
 def update_loop(
@@ -384,11 +387,18 @@ async def _generate_midi_openai(
 
     # First pass: allow the model to use tools if needed
     if tools:
-        response = await client.responses.create(
-            model=model_name,
-            input=messages,
-            tools=tools,
-        )
+        with otel.chat_span(provider="openai", model=model_name) as span:
+            response = await client.responses.create(
+                model=model_name,
+                input=messages,
+                tools=tools,
+            )
+            otel.record_usage(
+                span,
+                input_tokens=getattr(response.usage, "input_tokens", None) if response.usage else None,
+                output_tokens=getattr(response.usage, "output_tokens", None) if response.usage else None,
+                response_model=response.model,
+            )
 
         # Handle tool calls in a loop (max 3 iterations)
         for _ in range(3):
@@ -403,7 +413,8 @@ async def _generate_midi_openai(
             # Execute function calls and add results
             for call in function_calls:
                 if call.name == "get_adjacent_tracks_midi":
-                    result = get_adjacent_tracks_midi(user_id, loop_id)
+                    with otel.execute_tool_span(tool_name="get_adjacent_tracks_midi", call_id=call.call_id):
+                        result = get_adjacent_tracks_midi(user_id, loop_id)
                     messages.append(
                         {
                             "type": "function_call_output",
@@ -413,16 +424,30 @@ async def _generate_midi_openai(
                     )
 
             # Continue the conversation
-            response = await client.responses.create(
-                model=model_name,
-                input=messages,
-                tools=tools,
-            )
+            with otel.chat_span(provider="openai", model=model_name) as span:
+                response = await client.responses.create(
+                    model=model_name,
+                    input=messages,
+                    tools=tools,
+                )
+                otel.record_usage(
+                    span,
+                    input_tokens=getattr(response.usage, "input_tokens", None) if response.usage else None,
+                    output_tokens=getattr(response.usage, "output_tokens", None) if response.usage else None,
+                    response_model=response.model,
+                )
 
     # Final pass: get structured output
-    response = await client.responses.parse(
-        model=model_name, input=messages, text_format=midi_schemas.GenerateMidiResponse
-    )
+    with otel.chat_span(provider="openai", model=model_name) as span:
+        response = await client.responses.parse(
+            model=model_name, input=messages, text_format=midi_schemas.GenerateMidiResponse
+        )
+        otel.record_usage(
+            span,
+            input_tokens=getattr(response.usage, "input_tokens", None) if response.usage else None,
+            output_tokens=getattr(response.usage, "output_tokens", None) if response.usage else None,
+            response_model=response.model,
+        )
     if not isinstance(response.output_parsed, midi_schemas.GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse MIDI response from OpenAI.")
     return response.output_parsed
@@ -476,7 +501,8 @@ async def _generate_midi_anthropic(
                 if block.type == "tool_use":
                     assistant_content.append(block)
                     if block.name == "get_adjacent_tracks_midi":
-                        result = get_adjacent_tracks_midi(user_id, loop_id)
+                        with otel.execute_tool_span(tool_name="get_adjacent_tracks_midi", call_id=block.id):
+                            result = get_adjacent_tracks_midi(user_id, loop_id)
                         tool_results.append(
                             {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)}
                         )
@@ -497,14 +523,22 @@ async def _generate_midi_anthropic(
             )
 
     # Final pass: get structured output
-    anthropic_response = await client.beta.messages.parse(
-        model=model_name,
-        max_tokens=4096,
-        betas=["structured-outputs-2025-11-13"],
-        system=system_prompt or SYSTEM_PROMPT,
-        messages=messages,
-        output_format=midi_schemas.GenerateMidiResponse,
-    )
+    with otel.chat_span(provider="anthropic", model=model_name) as span:
+        anthropic_response = await client.beta.messages.parse(
+            model=model_name,
+            max_tokens=4096,
+            betas=["structured-outputs-2025-11-13"],
+            system=system_prompt or SYSTEM_PROMPT,
+            messages=messages,
+            output_format=midi_schemas.GenerateMidiResponse,
+        )
+        usage = getattr(anthropic_response, "usage", None)
+        otel.record_usage(
+            span,
+            input_tokens=getattr(usage, "input_tokens", None) if usage else None,
+            output_tokens=getattr(usage, "output_tokens", None) if usage else None,
+            response_model=getattr(anthropic_response, "model", None),
+        )
 
     if not isinstance(anthropic_response.parsed_output, midi_schemas.GenerateMidiResponse):
         raise HTTPException(status_code=500, detail="Failed to parse structured output from Anthropic.")

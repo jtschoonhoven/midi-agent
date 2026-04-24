@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api import auth
+from api import auth, otel
 from api.database import init_db
 from api.instruments import instrument_routes, instrument_utils
 from api.loops import loop_routes
@@ -131,6 +131,7 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 def startup_event() -> None:
     load_dotenv()
     weave.init(os.environ["PROJECT_ID"])
+    otel.init_otel()
     midi_agents.init_scorers()
 
     init_db()
