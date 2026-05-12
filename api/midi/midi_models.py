@@ -33,7 +33,7 @@ class GeneratedMidiEvent(pydantic.BaseModel):
     beat: int | None = pydantic.Field(None, gt=0, lt=9, description="The beat within the measure, starting from 1")
     beat_div4: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into quarters")
     beat_div16: int | None = pydantic.Field(None, gt=0, lt=9, description="Divides the beat into 16ths")
-    event: str | MidiEventType = pydantic.Field(
+    event: str = pydantic.Field(
         description='MIDI note, cc, or GM drum name: "C#4", "Sustain", "Open Hi-Hat'
     )
     value: int = pydantic.Field(ge=0, le=100, description="Velocity or CC value, scaled 0-100")
