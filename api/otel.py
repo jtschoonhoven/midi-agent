@@ -1,7 +1,7 @@
-"""OTel GenAI tracing configured to export to Weave's /otel/v1/genai/traces ingest endpoint.
+"""OTel GenAI tracing configured to export to Weave's /agents/otel/v1/traces ingest endpoint.
 
-Resource attributes `wandb.entity_name` and `wandb.project_id` route spans to the
-correct W&B project. Auth via the `wandb-api-key` header.
+Resource attributes `wb_entity` and `wb_project` (plus a `project_id` header) route
+spans to the correct W&B project. Auth via the `wandb-api-key` header.
 
 Also exposes context managers for the GenAI operations that aren't (or aren't fully)
 covered by the OpenAI/Anthropic auto-instrumentations: `invoke_agent`, `execute_tool`,
@@ -26,7 +26,7 @@ from weave.trace.env import weave_trace_server_url
 
 log = logging.getLogger(__name__)
 
-WEAVE_INGEST_PATH = "/otel/v1/genai/traces"
+WEAVE_INGEST_PATH = "/agents/otel/v1/traces"
 
 
 def init_otel() -> None:
@@ -38,7 +38,7 @@ def init_otel() -> None:
 
     The trace server base URL is resolved by weave itself via `weave_trace_server_url()`
     (honors WF_TRACE_SERVER_URL, WANDB_BASE_URL, or the SaaS default); we append
-    `/otel/v1/genai/traces` to it.
+    `/agents/otel/v1/traces` to it.
     """
     project_id = os.environ["PROJECT_ID"]
     api_key = os.environ["WANDB_API_KEY"]
@@ -54,19 +54,16 @@ def init_otel() -> None:
     resource = Resource.create(
         {
             "service.name": "midi-agent",
-            # Resource attributes the Weave trace server uses to route spans to a project.
-            "wb_entity": entity_name,
-            "wb_project": project_name,
+            # Resource attribute names expected by the /agents/otel/v1/traces route on the
+            # W&B trace server. (The standard /otel/v1/traces route uses wb_entity/wb_project
+            # instead — different name conventions per route.)
+            "wandb.entity": entity_name,
+            "wandb.project": project_name,
         }
     )
 
     provider = TracerProvider(resource=resource)
-    # Also send project_id as a header — belt-and-suspenders in case the server prefers
-    # it over resource attributes on certain ingest routes.
-    exporter = OTLPSpanExporter(
-        endpoint=endpoint,
-        headers={"wandb-api-key": api_key, "project_id": project_id},
-    )
+    exporter = OTLPSpanExporter(endpoint=endpoint, headers={"wandb-api-key": api_key})
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
