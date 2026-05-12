@@ -7,8 +7,9 @@ app:
 	cd app && npm run dev
 
 up:
-	@make api 2>&1 | sed 's/^/[API] /' & \
-	make app 2>&1 | sed 's/^/[APP] /' & \
+	@trap 'kill 0' INT TERM EXIT; \
+	(make api 2>&1 | sed 's/^/[API] /') & \
+	(make app 2>&1 | sed 's/^/[APP] /') & \
 	wait
 
 fmt:
