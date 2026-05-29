@@ -278,7 +278,13 @@ class _GenerateMidi(weave.Model):
         # Get provider from the map (returns tuple of (provider, model_name))
         provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
-        with otel.invoke_agent_span(agent_name="midi-generator", provider=provider, model=self.model_name):
+        conversation_id = str(loop_id) if loop_id else None
+        with otel.invoke_agent_span(
+            agent_name="midi-generator",
+            provider=provider,
+            model=self.model_name,
+            conversation_id=conversation_id,
+        ):
             if provider == "openai":
                 return await _generate_midi_openai(
                     self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
@@ -381,13 +387,14 @@ async def _generate_midi_openai(
 ) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncOpenAI(api_key=api_key)
     messages = cast(list[ResponseInputItemParam], chat_history)
+    conversation_id = str(loop_id) if loop_id else None
 
     # Only include tools if we have context to execute them
     tools = [GET_ADJACENT_TRACKS_TOOL_OPENAI] if user_id and loop_id else None
 
     # First pass: allow the model to use tools if needed
     if tools:
-        with otel.chat_span(provider="openai", model=model_name) as span:
+        with otel.chat_span(provider="openai", model=model_name, conversation_id=conversation_id) as span:
             response = await client.responses.create(
                 model=model_name,
                 input=messages,
@@ -413,7 +420,11 @@ async def _generate_midi_openai(
             # Execute function calls and add results
             for call in function_calls:
                 if call.name == "get_adjacent_tracks_midi":
-                    with otel.execute_tool_span(tool_name="get_adjacent_tracks_midi", call_id=call.call_id):
+                    with otel.execute_tool_span(
+                        tool_name="get_adjacent_tracks_midi",
+                        call_id=call.call_id,
+                        conversation_id=conversation_id,
+                    ):
                         result = get_adjacent_tracks_midi(user_id, loop_id)
                     messages.append(
                         {
@@ -424,7 +435,7 @@ async def _generate_midi_openai(
                     )
 
             # Continue the conversation
-            with otel.chat_span(provider="openai", model=model_name) as span:
+            with otel.chat_span(provider="openai", model=model_name, conversation_id=conversation_id) as span:
                 response = await client.responses.create(
                     model=model_name,
                     input=messages,
@@ -462,6 +473,7 @@ async def _generate_midi_anthropic(
     loop_id: str | UUID | None = None,
 ) -> "midi_schemas.GenerateMidiResponse":
     client = AsyncAnthropic(api_key=api_key)
+    conversation_id = str(loop_id) if loop_id else None
     system_prompt = ""
     messages: list[BetaMessageParam] = []
 
@@ -501,7 +513,11 @@ async def _generate_midi_anthropic(
                 if block.type == "tool_use":
                     assistant_content.append(block)
                     if block.name == "get_adjacent_tracks_midi":
-                        with otel.execute_tool_span(tool_name="get_adjacent_tracks_midi", call_id=block.id):
+                        with otel.execute_tool_span(
+                            tool_name="get_adjacent_tracks_midi",
+                            call_id=block.id,
+                            conversation_id=conversation_id,
+                        ):
                             result = get_adjacent_tracks_midi(user_id, loop_id)
                         tool_results.append(
                             {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)}
@@ -523,7 +539,7 @@ async def _generate_midi_anthropic(
             )
 
     # Final pass: get structured output
-    with otel.chat_span(provider="anthropic", model=model_name) as span:
+    with otel.chat_span(provider="anthropic", model=model_name, conversation_id=conversation_id) as span:
         anthropic_response = await client.beta.messages.parse(
             model=model_name,
             max_tokens=4096,
