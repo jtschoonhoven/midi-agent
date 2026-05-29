@@ -65,7 +65,6 @@ class ChatHistoryResponse(pydantic.BaseModel):
 class AppendChatRequest(pydantic.BaseModel):
     """Request model for appending a new chat message to a loop."""
 
-    loop_id: str = pydantic.Field(description="ID of the loop to add the chat message to")
     msg: str = pydantic.Field(min_length=1, description="User message content")
     measures: int = pydantic.Field(ge=1, le=32, description="Number of measures in the loop (1-32)")
 

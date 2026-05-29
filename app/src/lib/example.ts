@@ -37,8 +37,7 @@ export async function exampleCreateSongAndLoop() {
       console.log("Loop created with", loopResult.data.measures, "measures");
 
       // Add a chat message to generate MIDI
-      const chatResult = await appendLoopChat({
-        loop_id: loopResult.data.id,
+      const chatResult = await appendLoopChat(loopResult.data.id, {
         msg: "Create a cheerful melody in C major",
         measures: 4,
       });

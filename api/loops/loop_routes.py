@@ -137,6 +137,7 @@ async def update_loop(
 
 @router.post("/loops/{loop_id}/chats", response_model=loop_schemas.LoopDetailResponse)
 async def append_chat(
+    loop_id: UUID,
     request: loop_schemas.AppendChatRequest,
     http_request: Request,
     user_id: UUID | None = Depends(auth.get_current_user_id),
@@ -155,7 +156,7 @@ async def append_chat(
                 joinedload(loop_models.MidiLoop.chat_messages),
                 joinedload(loop_models.MidiLoop.track).joinedload(track_models.MidiTrack.song),
             )
-            .filter(loop_models.MidiLoop.id == str(request.loop_id), song_models.MidiSong.user_id == str(user_id))
+            .filter(loop_models.MidiLoop.id == str(loop_id), song_models.MidiSong.user_id == str(user_id))
             .first()
         )
 

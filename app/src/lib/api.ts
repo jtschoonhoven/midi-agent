@@ -137,9 +137,15 @@ export async function createLoop(
  * ```
  */
 export async function appendLoopChat(
+  loopId: string,
   request: paths["/api/midi/loops/{loop_id}/chats"]["post"]["requestBody"]["content"]["application/json"]
 ) {
   return await apiClient.POST("/api/midi/loops/{loop_id}/chats", {
+    params: {
+      path: {
+        loop_id: loopId,
+      },
+    },
     body: request,
   });
 }

@@ -551,8 +551,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
         // Start background generation (don't await)
         (async () => {
           try {
-            await appendLoopChat({
-              loop_id: newLoop.id,
+            await appendLoopChat(newLoop.id, {
               msg: loopPrompt,
               measures: loopMeasures,
             });
@@ -599,8 +598,7 @@ export default function ChatInterface({ onRequestAuth }: ChatInterfaceProps) {
         // Start background generation (don't await)
         (async () => {
           try {
-            const chatResult = await appendLoopChat({
-              loop_id: loopId,
+            const chatResult = await appendLoopChat(loopId, {
               msg: prompt,
               measures: measures,
             });
