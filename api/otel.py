@@ -8,9 +8,10 @@ covered by the OpenAI/Anthropic auto-instrumentations: `invoke_agent`, `execute_
 and `chat` for the untraced OpenAI Responses API and Anthropic structured-output calls.
 """
 
+import json
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -117,9 +118,20 @@ def _tracer() -> trace.Tracer:
 
 @contextmanager
 def invoke_agent_span(
-    *, agent_name: str, provider: str, model: str, conversation_id: str | None = None
+    *,
+    agent_name: str,
+    provider: str,
+    model: str,
+    conversation_id: str | None = None,
+    input_messages: Sequence[Mapping[str, Any]] | None = None,
+    system_instructions: str | None = None,
 ) -> Iterator[Span]:
-    """GenAI `invoke_agent` span — wraps one full agent run."""
+    """GenAI `invoke_agent` span — wraps one full agent run.
+
+    `input_messages` is the chat history fed to the agent (list of {"role", "content"} dicts).
+    `system_instructions` is the system prompt. Both are serialized per the GenAI semconv so
+    the root span carries the full turn context, not just the child LLM spans.
+    """
     attrs: dict[str, Any] = {
         "gen_ai.operation.name": "invoke_agent",
         "gen_ai.agent.name": agent_name,
@@ -128,6 +140,10 @@ def invoke_agent_span(
     }
     if conversation_id:
         attrs["gen_ai.conversation.id"] = conversation_id
+    if system_instructions:
+        attrs["gen_ai.system_instructions"] = system_instructions
+    if input_messages is not None:
+        attrs["gen_ai.input.messages"] = _serialize_messages(input_messages)
     with _tracer().start_as_current_span(
         f"invoke_agent {agent_name}",
         kind=SpanKind.CLIENT,
@@ -185,3 +201,38 @@ def record_usage(
         span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
     if response_model is not None:
         span.set_attribute("gen_ai.response.model", response_model)
+
+
+def record_agent_output(span: Span, content: Any) -> None:
+    """Record the agent's final output on an invoke_agent span as a single assistant message.
+
+    `content` may be a string or anything JSON-serializable (pydantic models are dumped via
+    model_dump if available, otherwise str()).
+    """
+    if hasattr(content, "model_dump"):
+        body = json.dumps(content.model_dump(), default=str)
+    elif isinstance(content, str):
+        body = content
+    else:
+        try:
+            body = json.dumps(content, default=str)
+        except (TypeError, ValueError):
+            body = str(content)
+    span.set_attribute(
+        "gen_ai.output.messages",
+        json.dumps([{"role": "assistant", "parts": [{"type": "text", "content": body}]}]),
+    )
+
+
+def _serialize_messages(messages: Sequence[Mapping[str, Any]]) -> str:
+    """Convert a chat history (list of {"role", "content"}) to GenAI semconv JSON.
+
+    Skips entries with role="system" — the system prompt is carried on `gen_ai.system_instructions`.
+    """
+    return json.dumps(
+        [
+            {"role": m["role"], "parts": [{"type": "text", "content": str(m.get("content", ""))}]}
+            for m in messages
+            if m.get("role") != "system"
+        ]
+    )

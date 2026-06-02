@@ -129,7 +129,8 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event() -> None:
-    load_dotenv()
+    # override=True so .env takes precedence over shell vars (e.g. WANDB_BASE_URL)
+    load_dotenv(override=True)
     weave.init(os.environ["PROJECT_ID"])
     otel.init_otel()
     midi_agents.init_scorers()
