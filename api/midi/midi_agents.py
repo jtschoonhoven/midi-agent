@@ -9,6 +9,8 @@ import os
 from typing import TypedDict, cast
 from uuid import UUID
 
+import anthropic
+import openai
 import weave
 from anthropic import AsyncAnthropic
 from anthropic.types.beta import BetaMessageParam
@@ -180,8 +182,10 @@ async def generate_midi_for_loop(
 
     model = get_model(model_name, SYSTEM_PROMPT)
 
+    call: Call | None = None
     for n in range(MAX_ATTEMPTS):
         try:
+            # __should_raise=True so provider exceptions propagate instead of being captured silently on the Call.
             response: tuple[midi_schemas.GenerateMidiResponse, Call] = await model.invoke.call(
                 model,
                 chat_history=chat_history,
@@ -193,6 +197,7 @@ async def generate_midi_for_loop(
                 api_key=api_key,
                 user_id=user_id,
                 loop_id=loop_id,
+                __should_raise=True,
             )
             result, call = response
             score_result: ApplyScorerResult = await call.apply_scorer(
@@ -214,12 +219,18 @@ async def generate_midi_for_loop(
                 agent_description=result.description,
                 midi_events=result.to_midi_events(),
             )
+        except (anthropic.AuthenticationError, openai.AuthenticationError) as e:
+            # Bad API key — no point retrying. Surface the provider's 401 directly.
+            raise HTTPException(status_code=401, detail=f"Provider rejected API key: {e}") from e
+        except (anthropic.PermissionDeniedError, openai.PermissionDeniedError) as e:
+            raise HTTPException(status_code=403, detail=str(e)) from e
         except Exception as e:
             chat_history.append(
                 ChatMessage(role="user", content=f"Previous attempt failed, please fix the error and try again: {e}")
             )
             log.exception(f"Generate midi attempt {n + 1}/{MAX_ATTEMPTS} failed: {e}")
-            call.feedback.add_reaction("👎")
+            if call is not None:
+                call.feedback.add_reaction("👎")
 
     raise HTTPException(
         status_code=500, detail=f"Failed to generate valid MIDI after {MAX_ATTEMPTS} attempts. Please try again."
@@ -279,24 +290,27 @@ class _GenerateMidi(weave.Model):
         provider, _ = MODEL_PROVIDER_MAP[self.model_name]
 
         conversation_id = str(loop_id) if loop_id else None
+        system_instructions = next((m["content"] for m in chat_history if m["role"] == "system"), None)
         with otel.invoke_agent_span(
             agent_name="midi-generator",
             provider=provider,
             model=self.model_name,
             conversation_id=conversation_id,
-        ):
+            input_messages=chat_history,
+            system_instructions=system_instructions,
+        ) as agent_span:
             if provider == "openai":
-                return await _generate_midi_openai(
+                result = await _generate_midi_openai(
                     self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
                 )
-
             elif provider == "anthropic":
-                return await _generate_midi_anthropic(
+                result = await _generate_midi_anthropic(
                     self.model_name, chat_history, api_key, user_id=user_id, loop_id=loop_id
                 )
-
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported model provider: {provider}")
+            otel.record_agent_output(agent_span, result)
+            return result
 
 
 def update_loop(
