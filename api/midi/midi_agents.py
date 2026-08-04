@@ -15,6 +15,8 @@ import weave
 from anthropic import AsyncAnthropic
 from anthropic.types.beta import BetaMessageParam
 from fastapi import HTTPException
+from langsmith import traceable
+from langsmith.wrappers import wrap_anthropic, wrap_openai
 from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputItemParam
 from weave.flow.scorer import ApplyScorerResult
@@ -65,6 +67,7 @@ GET_ADJACENT_TRACKS_TOOL_OPENAI = {
 }
 
 
+@traceable(name="Get adjacent tracks MIDI", run_type="tool")
 @weave.op(kind="tool")
 def get_adjacent_tracks_midi(user_id: str | UUID, loop_id: str | UUID) -> list[dict]:
     """
@@ -255,6 +258,7 @@ class _GenerateMidi(weave.Model):
     model_name: ModelName
     system_prompt: str
 
+    @traceable(name="Generate MIDI", run_type="chain", process_inputs=_redact_api_key)
     @weave.op(kind="agent", postprocess_inputs=_redact_api_key)
     async def invoke(
         self,
@@ -399,7 +403,7 @@ async def _generate_midi_openai(
     user_id: str | UUID | None = None,
     loop_id: str | UUID | None = None,
 ) -> "midi_schemas.GenerateMidiResponse":
-    client = AsyncOpenAI(api_key=api_key)
+    client = wrap_openai(AsyncOpenAI(api_key=api_key))
     messages = cast(list[ResponseInputItemParam], chat_history)
     conversation_id = str(loop_id) if loop_id else None
 
@@ -486,7 +490,7 @@ async def _generate_midi_anthropic(
     user_id: str | UUID | None = None,
     loop_id: str | UUID | None = None,
 ) -> "midi_schemas.GenerateMidiResponse":
-    client = AsyncAnthropic(api_key=api_key)
+    client = wrap_anthropic(AsyncAnthropic(api_key=api_key))
     conversation_id = str(loop_id) if loop_id else None
     system_prompt = ""
     messages: list[BetaMessageParam] = []

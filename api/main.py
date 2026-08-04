@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api import auth, otel
+from api import auth, langsmith, otel
 from api.database import init_db
 from api.instruments import instrument_routes, instrument_utils
 from api.loops import loop_routes
@@ -126,14 +126,38 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
 
+def init_weave_observability() -> None:
+    """Initialize the optional legacy Weave/W&B exporter.
+
+    Generation uses Weave's decorators locally even without an initialized
+    exporter, while LangSmith owns the configured tracing path. Do not prevent
+    the API from starting merely because W&B credentials are absent or its
+    endpoint is temporarily unavailable.
+    """
+    if os.environ.get("WEAVE_TRACING", "").lower() != "true":
+        log.info("Weave/W&B export disabled; LangSmith tracing is the default")
+        return
+
+    project_id = os.environ.get("PROJECT_ID")
+    if not project_id or not os.environ.get("WANDB_API_KEY"):
+        log.info("Weave/W&B export disabled: PROJECT_ID or WANDB_API_KEY is not configured")
+        return
+
+    try:
+        weave.init(project_id)
+        otel.init_otel()
+        midi_agents.init_scorers()
+    except Exception:
+        log.exception("Weave/W&B export disabled after initialization failed")
+
+
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event() -> None:
     # override=True so .env takes precedence over shell vars (e.g. WANDB_BASE_URL)
     load_dotenv(override=True)
-    weave.init(os.environ["PROJECT_ID"])
-    otel.init_otel()
-    midi_agents.init_scorers()
+    langsmith.configure_tracing()
+    init_weave_observability()
 
     init_db()
     instrument_utils.init_db()
